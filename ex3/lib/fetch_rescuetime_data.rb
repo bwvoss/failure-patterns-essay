@@ -1,25 +1,27 @@
 require 'active_support/core_ext/time/calculations.rb'
+require 'httparty'
 
 class ChocolateShell
   # with chocolate rain
   def self.call(actions, context)
-    # could use reduce to remove the mutation of the context variable?
-    actions.each do |action|
+    actions.reduce(context) do |context, action|
       begin
-        context = action.call(context)
+        action.call(context)
       rescue => e
         # Forces me to make the log more generic
         # but cleans the exception handling and fatal logging
-        Log.fatal("action: #{action} failed with: #{e.inspect}")
+        context.fetch(:logger).fatal("action: #{action} failed with: #{e.inspect}")
         # break from the loop and handle error gracefully
         break
       end
     end
+
+    context
   end
 end
 
 class RescuetimeData
-  def self.fetch(datetime)
+  def self.fetch(datetime, logger)
     actions = [
       -> (context) { self.build_url(context) },
       -> (context) { self.make_get_request(context) },
@@ -27,14 +29,12 @@ class RescuetimeData
     ]
 
     run_start_time = Time.now
+    context = ChocolateShell.call(actions, datetime: datetime, logger: logger)
 
-    context = ChocolateShell.call(actions, datetime: datetime)
-
-    Log.info("Rescuetime fetch completed in: #{Time.now - run_start_time}")
+    logger.info("Rescuetime fetch completed in: #{Time.now - run_start_time}")
 
     context.fetch(:parsed_rows)
   end
-end
 
   def self.build_url(context)
     datetime = context.fetch(:datetime)
@@ -56,7 +56,7 @@ end
 
     context[:response] = HTTParty.get(context.fetch(:url))
 
-    Log.info("duration of http request: #{Time.now - start_time}")
+    context.fetch(:logger).info("duration of http request: #{Time.now - start_time}")
 
     context
   end
@@ -64,7 +64,7 @@ end
   def self.parse_response_to_rows(context)
     start_time = Time.now
 
-    context.fetch(:response).fetch('rows').map do |row|
+    parsed_rows = context.fetch(:response).fetch('rows').map do |row|
       {
         date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
         time_spent_in_seconds: row[1],
@@ -74,7 +74,10 @@ end
         productivity:          row[5]
       }
     end
-    Log.info("duration of data parsing: #{Time.now - start_time}")
+
+    context[:parsed_rows] = parsed_rows
+
+    context.fetch(:logger).info("duration of data parsing: #{Time.now - start_time}")
 
     context
   end

@@ -1,42 +1,50 @@
 require 'active_support/core_ext/time/calculations.rb'
+require 'httparty'
 
 class RescuetimeData
-  def self.fetch(datetime)
+  def self.fetch(datetime, logger)
     run_start_time = Time.now
 
     begin
-      build_url(datetime)
+      url = build_url(datetime)
     rescue => e
-      Log.fatal("Unparsable date of: #{e.inspect}")
+      logger.fatal("Problem parsing url: #{e.inspect}")
+			return
     end
 
     start_time = Time.now
     begin
       response = HTTParty.get(url)
     rescue => e
-      Log.fatal("Http failed: #{e.inspect}, with url of #{url}")
+      logger.fatal("Http failed: #{e.inspect}")
+			return
     end
 
-    Log.info("duration of http request: #{Time.now - start_time}")
+    logger.info("duration of http request: #{Time.now - start_time}")
 
     start_time = Time.now
     begin
       parsed_rows = parse_response_to_rows(response)
     rescue => e
-      Log.fatal("parsing of date to utc failed: #{e.inspect}")
+      logger.fatal("Parsing date failed: #{e.inspect}")
     end
 
-    Log.info("duration of data parsing: #{Time.now - start_time}")
-    Log.info("Rescuetime fetch completed in: #{Time.now - run_start_time}")
+    logger.info("duration of data parsing: #{Time.now - start_time}")
+    logger.info("Rescuetime fetch completed in: #{Time.now - run_start_time}")
 
     parsed_rows
   end
 
   def self.build_url(datetime)
+		raise if datetime.nil?
     formatted_date = datetime.strftime('%Y-%m-%d')
 
-    "#{ENV['RESCUETIME_API_URL']}?"\
-    "key=#{ENV['RESCUETIME_API_KEY']}&"\
+		api_url = ENV['RESCUETIME_API_URL']
+		api_key = ENV['RESCUETIME_API_KEY']
+		raise if api_url.nil? || api_key.nil?
+
+    "#{api_url}?"\
+    "key=#{api_key}&"\
     "restrict_begin=#{formatted_date}&"\
     "restrict_end=#{formatted_date}&"\
     'perspective=interval&'\
@@ -45,9 +53,12 @@ class RescuetimeData
   end
 
   def self.parse_response_to_rows(response)
+		timezone = ENV['RESCUETIME_TIMEZONE']
+		raise "no timezone" if timezone.nil?
+
     response.fetch('rows').map do |row|
       {
-        date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+        date:                  ActiveSupport::TimeZone[timezone].parse(row[0]).utc.to_s,
         time_spent_in_seconds: row[1],
         number_of_people:      row[2],
         activity:              row[3],

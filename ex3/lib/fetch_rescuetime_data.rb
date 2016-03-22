@@ -2,69 +2,62 @@ require 'active_support/core_ext/time/calculations.rb'
 require 'httparty'
 
 class ChocolateShell
-  # with chocolate rain
-  def self.call(actions, context)
-    actions.reduce(context) do |context, action|
-      begin
-        action.call(context)
-      rescue => e
-        # Forces me to make the log more generic
-        # but cleans the exception handling and fatal logging
-        context.fetch(:logger).fatal("action: #{action} failed with: #{e.inspect}")
-        # break from the loop and handle error gracefully
-        break
-      end
+  def self.call(logger)
+    begin
+      yield
+    rescue => e
+      logger.fatal("failed due to: #{e.inspect}")
+      return
     end
-
-    context
   end
 end
 
 class RescuetimeData
   def self.fetch(datetime, logger)
-    actions = [
-      -> (context) { self.build_url(context) },
-      -> (context) { self.make_get_request(context) },
-      -> (context) { self.parse_response_to_rows(context) }
-    ]
-
     run_start_time = Time.now
-    context = ChocolateShell.call(actions, datetime: datetime, logger: logger)
+
+    parsed_rows = ChocolateShell.call(logger) do
+      start_time = Time.now
+      response = request(datetime)
+      logger.info("duration of http request: #{Time.now - start_time}")
+
+
+      start_time = Time.now
+      parsed_rows = parse_response_to_rows(response)
+      logger.info("duration of data parsing: #{Time.now - start_time}")
+
+      parsed_rows
+    end
 
     logger.info("Rescuetime fetch completed in: #{Time.now - run_start_time}")
 
-    context.fetch(:parsed_rows)
+    parsed_rows
   end
 
-  def self.build_url(context)
-    datetime = context.fetch(:datetime)
+  def self.request(datetime)
+		raise if datetime.nil?
     formatted_date = datetime.strftime('%Y-%m-%d')
 
-    context[:url] = "#{ENV['RESCUETIME_API_URL']}?"\
-    "key=#{ENV['RESCUETIME_API_KEY']}&"\
+		api_url = ENV['RESCUETIME_API_URL']
+		api_key = ENV['RESCUETIME_API_KEY']
+		raise if api_url.nil? || api_key.nil?
+
+    url = "#{api_url}?"\
+    "key=#{api_key}&"\
     "restrict_begin=#{formatted_date}&"\
     "restrict_end=#{formatted_date}&"\
     'perspective=interval&'\
     'resolution_time=minute&'\
     'format=json'
 
-    context
+    HTTParty.get(url)
   end
 
-  def self.make_get_request(context)
-    start_time = Time.now
+  def self.parse_response_to_rows(response)
+		timezone = ENV['RESCUETIME_TIMEZONE']
+		raise "no timezone" if timezone.nil?
 
-    context[:response] = HTTParty.get(context.fetch(:url))
-
-    context.fetch(:logger).info("duration of http request: #{Time.now - start_time}")
-
-    context
-  end
-
-  def self.parse_response_to_rows(context)
-    start_time = Time.now
-
-    parsed_rows = context.fetch(:response).fetch('rows').map do |row|
+    response.fetch('rows').map do |row|
       {
         date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
         time_spent_in_seconds: row[1],
@@ -74,11 +67,5 @@ class RescuetimeData
         productivity:          row[5]
       }
     end
-
-    context[:parsed_rows] = parsed_rows
-
-    context.fetch(:logger).info("duration of data parsing: #{Time.now - start_time}")
-
-    context
   end
 end

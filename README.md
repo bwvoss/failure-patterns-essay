@@ -137,15 +137,89 @@ The idea has some interesting points that could aid in refactoring our code.  If
 
 #### A simple implementation: the begin/rescue shell
 
-ex3
+```
+require 'active_support/core_ext/time/calculations.rb'
+require 'httparty'
 
-Show the change to the tests, too.
+class ChocolateShell
+  def self.call(logger)
+    begin
+      yield
+    rescue => e
+      logger.fatal("failed due to: #{e.inspect}")
+      return
+    end
+  end
+end
 
-7. Basic logging: Introduce the Chain of Responsibility
+class RescuetimeData
+  def self.fetch(datetime, logger)
+    run_start_time = Time.now
+
+    parsed_rows = ChocolateShell.call(logger) do
+      start_time = Time.now
+      response = request(datetime)
+      logger.info("duration of http request: #{Time.now - start_time}")
+
+
+      start_time = Time.now
+      parsed_rows = parse_response_to_rows(response)
+      logger.info("duration of data parsing: #{Time.now - start_time}")
+
+      parsed_rows
+    end
+
+    logger.info("Rescuetime fetch completed in: #{Time.now - run_start_time}")
+
+    parsed_rows
+  end
+
+  def self.request(datetime)
+	raise if datetime.nil?
+    formatted_date = datetime.strftime('%Y-%m-%d')
+
+		api_url = ENV['RESCUETIME_API_URL']
+		api_key = ENV['RESCUETIME_API_KEY']
+		raise if api_url.nil? || api_key.nil?
+
+    url = "#{api_url}?"\
+    "key=#{api_key}&"\
+    "restrict_begin=#{formatted_date}&"\
+    "restrict_end=#{formatted_date}&"\
+    'perspective=interval&'\
+    'resolution_time=minute&'\
+    'format=json'
+
+    HTTParty.get(url)
+  end
+
+  def self.parse_response_to_rows(response)
+	timezone = ENV['RESCUETIME_TIMEZONE']
+	raise "no timezone" if timezone.nil?
+
+    response.fetch('rows').map do |row|
+      {
+        date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+        time_spent_in_seconds: row[1],
+        number_of_people:      row[2],
+        activity:              row[3],
+        category:              row[4],
+        productivity:          row[5]
+      }
+    end
+  end
+end
+```
+
+*[ex3 and tests](http://github.com)*
+
+This is a huge improvement, though there are a few problems: we are begin/rescuing on everything, and we still have logging everywhere in our happy path.  It doesn't really allow the flexibility we need.
+
+#### Custom Logging and Exception Handling with the Chain of Responsibility
 
 The Chain of Responsibility pattern is a lot like a linked list of command objects.
 
-Like the command pattern, every object will have the same public method signature.  That means a single public method with the same airity, no matter what the object will do.
+Like the command pattern, every object will have the same public method signature.  That means a single public method with the same airity, no matter what the object will do.  While our design is simple enough where every method takes one input and returns one value, more complex chains may need to pass hashes in and out so the airity stays constant.
 
 Our design is being driven based on our needs to monitor or handle failure.
 
@@ -153,17 +227,12 @@ Also show how it keeps the business logic cleaner and the failure testing to one
 
 ex4
 
-8. Advanced Logging and Exception Handling
-
-ex5
-
 Custom per action, also communicating how the system behaves for failure.
 
 This could have a ExecutionFactory that takes the list of actions as an argument and then the tests will test real configuration.
 
-9. Adding Stability Patterns
 
-10. Exploring in other languages
+#### Exploring in other languages
 
 
 

@@ -3,8 +3,6 @@ require 'httparty'
 
 class RescuetimeData
   def self.fetch(datetime, logger)
-    run_start_time = Time.now
-
     begin
       url = build_url(datetime)
     rescue => e
@@ -12,7 +10,6 @@ class RescuetimeData
 			return
     end
 
-    start_time = Time.now
     begin
       response = HTTParty.get(url)
     rescue => e
@@ -20,17 +17,12 @@ class RescuetimeData
 			return
     end
 
-    logger.info("duration of http request: #{Time.now - start_time}")
-
-    start_time = Time.now
     begin
       parsed_rows = parse_response_to_rows(response)
     rescue => e
       logger.fatal("Parsing date failed: #{e.inspect}")
+      return
     end
-
-    logger.info("duration of data parsing: #{Time.now - start_time}")
-    logger.info("Rescuetime fetch completed in: #{Time.now - run_start_time}")
 
     parsed_rows
   end

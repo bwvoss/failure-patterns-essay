@@ -6,5 +6,6 @@ module Consumer
     result, error = Boundary.call do
       RescuetimeData.fetch
     end
+    # either raise error, or just return it and have the web handle it
   end
 end

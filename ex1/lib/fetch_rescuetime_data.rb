@@ -5,7 +5,7 @@ class RescuetimeData
   def self.fetch(datetime)
     response = request(datetime)
 
-    parsed_rows = response.fetch('rows').map do |row|
+    response.fetch('rows').map do |row|
       {
         date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
         time_spent_in_seconds: row[1],

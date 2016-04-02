@@ -1,11 +1,15 @@
-## Building For Fault Tolerance
+## Exploring Levels of Fault Tolerance
 
-TODO: Introduction
+To start, I'm going to lay out some assumptions that I do not have empirical proof for, but I think are mostly correct:
 
->
-While few people would claim the software they produce and the hardware it runs on never fails, it is not uncommon to design a software architecture under the presumption that everything will work.
+#### The 6 Assumptions of Failure in Software
 
-http://web.archive.org/web/20090430014122/http://nplus1.org/articles/a-crash-course-in-failure/
+1. Failure becomes more complex as the system grows
+2. If 1 is true, then failures are less complex in smaller systems
+3. Handling failure adds complexity and cost to the system
+4. If 1 and 3 are true, then the larger the system gets, the more complex and costly failure handling will become
+5. The system will still be used by customers even if it is experiencing partial or total failure.
+6. If 5 is true, then the product should be expected to satisfy a set of use cases during failure.
 
 Let's assume a program that fetches and parses data from Rescuetime's API:
 
@@ -17,7 +21,7 @@ class RescuetimeData
   def self.fetch(datetime)
 	response = request(datetime)
 
-	parsed_rows = response.fetch('rows').map do |row|
+	response.fetch('rows').map do |row|
 	  {
 		date:				  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
 		time_spent_in_seconds: row[1],
@@ -47,92 +51,178 @@ end
 ```
 *[ex1 and tests](http://github.com)*
 
-This is nice enough. Depending on coding style we may extract some methods, but we just intuitively like it and all think it's easy enough to work with.  The Flog score is 21.2 -- pretty good.  The business logic is clear. The tests clearly describe the behavior.  We deem this acceptably clean code, and release the software.
+This is nice enough. Depending on coding style we may extract some methods, but we just intuitively like it and all think it's easy enough to work with. The business logic is clear. The tests clearly describe the behavior.
 
+Since our system and userbase is small, we don't pay much attention to error handling.  We're more focused on delivering business value for the happy path.  We setup an exception notifier like Airbrake or Honeybadger and release the software.
 
-> A brief note on Flog
+Not too soon after release, our exception reporting is kicking in.  First, we forgot to set the right environment variables for the Rescuetime URL on our latest deploy, so we add guard statements:
 
-> Flog is a Ruby gem that uses ABC (assignments, branching and conditionals) to measure complexity in a piece of code.  I don't use it an absolute judgement for complexity, but it is a nice supplement to personal heuristics.
+```ruby
+def self.request(datetime)
+	formatted_date = datetime.strftime('%Y-%m-%d')
+	return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
+    # ...continue
+```
 
+Since request can now return nil, we add a guard to the parsing:
 
-More users have been complaining about seeing stack traces when using the app -- this is bad on a number of levels.  With more users, we are also getting more catastrophic failures.  We make a new release to handle as many failure cases as we can think of:
+```ruby
+def self.fetch(datetime)
+	response = request(datetime)
+	return unless response
+	
+	response.fetch('rows').map do |row|
+	  {
+		date: ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+		# ...continue
+```
+
+The consumer (here it is some sort of HTTP client) has to also be able to respond to nil:
+
+```ruby
+def get
+	response = RescuetimeFetch.request(params[:datetime])
+	
+	if response.nil?
+		return []
+	else
+		response
+	end
+end
+```
+
+Also, datetime is coming from the outside world, and we've seen lots of error reports with the ```params[:datetime]``` field full of bad data, and we want to make sure it is something parsable into a formatted date:
+
+```ruby
+begin
+	formatted_date = DateTime.parse(datetime).strftime('%Y-%m-%d')
+rescue => e
+	return { error: "not a real date" }
+end
+
+return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
+# ...continue
+```
+
+Since this is something from the user, we want them to have information in order to make a decision on what to do.  We don't change the API url information though since that is set in the configuration of the environment -- we don't want the user to set the api url.
+
+This now becomes:
+
+```ruby
+def self.fetch(datetime)
+	response = request(datetime)
+	return unless response 
+	return response if response[:error]
+	
+	response.fetch('rows').map do |row|
+	  {
+		date: ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+		# ...continue
+```
+
+And whatever is consuming our module:
+
+```ruby
+# In the consumer
+
+def get
+	response = RescuetimeFetch.request(params[:datetime])
+	
+	if response.nil? || response[:error]
+		return response[:error] || "We're sorry, something went wrong."
+	else
+		response
+	end
+end
+```
+
+At this point, let's look at the entire project:
+
+```ruby
+require 'fetch_rescuetime_data'
+
+module Consumer
+  def get
+    response = RescuetimeFetch.request(params[:datetime])
+
+    if response.nil? || response[:error]
+      return response[:error] ||
+        "We're sorry, something went wrong."
+    else
+      response
+    end
+  end
+end
+```
 
 ```ruby
 require 'active_support/core_ext/time/calculations.rb'
 require 'httparty'
 
 class RescuetimeData
-  def self.fetch(datetime, logger)
-	begin
-	  url = build_url(datetime)
-	rescue => e
-	  logger.fatal("Problem parsing url: #{e.inspect}")
-	  return
-	end
+  def self.fetch(datetime)
+    response = request(datetime)
+    return unless response
+    return response if response[:error]
 
-	begin
-	  response = HTTParty.get(url)
-	rescue => e
-	  logger.fatal("Http failed: #{e.inspect}")
-	  return
-	end
-
-	begin
-	  parsed_rows = parse_response_to_rows(response)
-	rescue => e
-	  logger.fatal("Parsing date failed: #{e.inspect}")
-	  return
-	end
-
-	parsed_rows
+    response.fetch('rows').map do |row|
+      {
+        date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+        time_spent_in_seconds: row[1],
+        number_of_people:      row[2],
+        activity:              row[3],
+        category:              row[4],
+        productivity:          row[5]
+      }
+    end
   end
 
-  def self.build_url(datetime)
-	raise if datetime.nil?
-	
-	formatted_date = datetime.strftime('%Y-%m-%d')
+  def self.request(datetime)
+    begin
+      formatted_date = DateTime.parse(datetime).strftime('%Y-%m-%d')
+    rescue => e
+      return { error: "not a real date" }
+    end
 
-	api_url = ENV['RESCUETIME_API_URL']
-	api_key = ENV['RESCUETIME_API_KEY']
-	raise if api_url.nil? || api_key.nil?
+    return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
 
-	"#{api_url}?"\
-	"key=#{api_key}&"\
-	"restrict_begin=#{formatted_date}&"\
-	"restrict_end=#{formatted_date}&"\
-	'perspective=interval&'\
-	'resolution_time=minute&'\
-	'format=json'
-  end
+    url =
+      "#{ENV['RESCUETIME_API_URL']}?"\
+      "key=#{ENV['RESCUETIME_API_KEY']}&"\
+      "restrict_begin=#{formatted_date}&"\
+      "restrict_end=#{formatted_date}&"\
+      'perspective=interval&'\
+      'resolution_time=minute&'\
+      'format=json'
 
-  def self.parse_response_to_rows(response)
-	timezone = ENV['RESCUETIME_TIMEZONE']
-	raise "no timezone" if timezone.nil?
-
-	response.fetch('rows').map do |row|
-	  {
-		date:				  ActiveSupport::TimeZone[timezone].parse(row[0]).utc.to_s,
-		time_spent_in_seconds: row[1],
-		number_of_people:	  row[2],
-		activity:			  row[3],
-		category:			  row[4],
-		productivity:		  row[5]
-	  }
-	end
+    HTTParty.get(url)
   end
 end
 ```
-*[ex2 and tests](http://github.com)*
 
-Our code has become close to unreadable.  Our control flow is hard to follow.  We're using raises for everything, so it is possible we are swallowing errors we should handle differently.  If we add another rescue block on another level above, we are royally screwed in the "where did this error happen?" department.  The business logic is hidden behind a mass of log statements and rescue blocks.  While we have accomplished the business requirements, our code begs for a cleaning.  
+At this point, alarms should be going off in our head, but it's really not that painful yet.  What we've done is a very natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.  By the time we realize the missing encapsulations, it'll probably be too late for an affordable refactor.
 
-This is progression is common in nearly every application I have seen with applications that add error handling when errors become an issue.  It's also common to see some modules do error handling at different levels, or a mix of error handling and sprinkled guard statements.  
+We have nearly the same amount of error handling code as we do happy path code, and we are only handling a fraction of all possible errors.
 
-The above example is small enough where refactoring it will not be an epic investment of time.  The larger the project gets without facing how to respond to failure, the more danger it assumes towards needing a massive rewrite later.  Failure, while maybe not as exotic as large projects, is still something small projects will face.
+Our module's post-conditions are fairly complex.  Sometimes we return nil.  Sometimes we return an object that has a message for the user.  Sometimes we use begin/rescue for flow control.  Sometimes we use conditionals.  Luckily we are consistent that if something is wrong, we stop the flow of execution, but that is not enforced and will easily be changed depending on what the next error is we have to fix (like if the response has no 'rows' key, we may default that fetch to an empty array).
 
-### How to Handle Failure
+While our users aren't seeing stack traces spewed onto their screens, we loose transparency and metrics.  One benefit of an exception notifier is the transparency it provides on how our system operates.  Swallowing errors or using guards doesn't fix the system, they just make the error notifier stop notifying.  The team's understanding of the system is inconsistent with reality.
 
-Some languages have already thought deeply about failure and how to deal with it from an early project state.  Others, like Ruby, make it easy to ignore failure until we becomed overwhelmed by faults.  Some languages don't make it that easy:
+We keep adding features, and as exceptions pop-up, we keep fixing them.  Meanwhile, lacking an abstraction to deal with error means the other features being built will repeat this process.
+
+### A checkin with the assumptions
+
+Still true to the assumptions of failure in software, the error handling has increased the complexity of our code and as our codebase grows, the complexity of the error and how we handle them increase.
+
+The error handling we did put in place, though, gracefully degraded features, while allowing the user to explore other parts of the system.  We haven't really explored the opportunity that handling failure can provide, but the product can still satisfy a set of use cases during partial failure.
+
+According to our principles, the codebase is growing, so the cost of handling error will continue to increase, and so will the complexity of our code.  What we need is a way to keep the cost and complexity of handing failure rise exponentially as more errors are fixed, or as the system grows.
+
+### How To Handle Failure
+
+> While few people would claim the software they produce and the hardware it runs on never fails, it is not uncommon to design a software architecture under the presumption that everything will work.
+
+http://web.archive.org/web/20090430014122/http://nplus1.org/articles/a-crash-course-in-failure/
 
 #### Go
 
@@ -185,9 +275,11 @@ http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG
 
 Erlang is designed to have millions of independent processes running in isolation.  A failure in one of the components shouldn't impact the rest of the system's ability to work.  Erlang systems _expect_ error.
 
-Letting a process crash is a central philosophy to Erlang.  Most systems will try to be error-free and defensively programmed.   Failing processes as fast as possible also helps avoid data corruption and transient bugs.  Even if by some heroic effort the application code handled every possible error, failure can still occur from an underlying hardware, security or network failure.
+Letting a process crash -- or fail fast -- is central to error handling in Erlang.  When there is a problem, do not return default values or null objects, and don't swallow the error.  Just crash.
 
-Erlang processes communicate through message passing and aren't required to receive an acknowledgement of reception, since a process could be sending a message to a process that currently doesn't exist, or will fail before the message can be processed.  As we will see, this provides a natural place to elegantly include error handling.
+Coming from a defensive programming mindset, this may seem outright dangerous.  But Erlang believes failing processes quickly helps avoid data corruption and transient bugs that commonly cause system crashes at scale.
+
+Failing fast also gets the application used to failure.  Defensive programming gives the product an illusion of fault tolerance. Remember -- to Erlang, error is inevitable.  Even if the application code handled every possible error, failure can still occur from an underlying hardware, security or network problem.  Letting processes crash makes the application consider error handling from the beginning.
 
 ##### Supervisors, Links and Monitors
 
@@ -207,6 +299,7 @@ When the monitored process terminates, the monitor will receive this data struct
 ```erlang
 {'DOWN', Ref, process, MonitoredPid, Reason}
 ```
+
 http://erlang.org/doc/reference_manual/processes.html
 
 A supervisor is a process that monitors and can restart other processes (even other supervisors!).  When the supervior dies, all child processes should also die (using a link), but when a child process dies, the supervisor should recognize the failure, and decide whether to restart the process or not (using a monitor).
@@ -219,7 +312,7 @@ About a year ago, Michael Feathers introduced me to a concept called "the chocol
 
 This approach to failure handling reduces the complexity error handling adds to sections of business logic.  It also provides a simple convention on where and how to handle failure.
 
-#### Principles in Failure
+#### Lessons From Go and Erlang
 
 > When writing code from a specification, the specification says what the code is supposed to do, it does not tell you what you’re supposed to do if the real world situation deviates from the specification
 > 
@@ -227,61 +320,94 @@ This approach to failure handling reduces the complexity error handling adds to 
 
 http://www.se-radio.net/2008/03/episode-89-joe-armstrong-on-erlang/
 
-##### Errors will *ALWAYS* Happen
+##### Make Error Handling a Foundational Abstraction
 
 > You can try to prevent bugs all you want, but most of the time, some will still creep in.  And even if by some miracle your code doesn't have any bugs, nothing can stop the eventual hardware failure.  Therefore, the idea is to find good ways to handle errors and problems, rather than trying to prevent them all.
 > 
 > Fred Hebert
 
-##### Localizing Error Handling Makes Flow Control Simpler
+Errors will *ALWAYS* happen.  Make error handling central to a system's design.  Basic fault tolerance should not be added in as an afterthought.  Consider the positive implications that having error as an explicit type provides: programmers are forced to confront the possiblity of failure on their very first I/O call.
 
-Go makes errors explicit and allows us to use common flow control techniques to direct behavior in applications that experience failure. Erlang fails fast and monitors.  Superviors are used to capture and deal with failure leaving most processes to focus soley on business logic.
+##### Fail Fast In One Way
 
-Business logic can also be void of error handling and can be solely written to communicate and acheive business goals.
+Go doesn't have throw/catches or (raise|fail)/rescues: an error is an error.  If it prevents the system from working correctly on the happy path, be like Erlang and jump out to handle it.  The handler needs to only concern itself with what to do in case of failure.
 
-http://devblog.avdi.org/2014/05/21/jim-weirich-on-exceptions/
+The user should see a graceful response no matter what.  The method an error was propogated up is invisible to them -- so long as it is handled.  All of these different ways of signaling an error has happened is for developer communication, and the variance is what is damaging.
 
-##### Error Handling Must Be Considered Early
+As stated above, errors will happen that we can't anticipate, so ensuring problems get filtered through the same location make us a bit safer when facing unrealized problems.
 
-Central to app convention.  Expensive to add in later.
+By simplifying the way we signal we have an error, and failing fast from it, we simplify the code, and reduce the chance of propogating stability cracks or data inaccuracies.
 
-As an explicit type, errors have to be ignored on purpose.  Programmers are forced to confront the possiblity of failure on I/O calls.  Erlang designed around lightweight, independent workers that could die and be monitored separate from the business goal they are deployed to acheive.
+##### Localize and Scope Error Handling
 
-In both languages, facing error is a central part of the design.  Fault tolerance is not added in as an afterthought.  
- 
-##### Handle Errors Generically
+With only one way to signal a problem, the handler has to be scoped enough to the flow of logic to still keep it simple.  In Erlang, a supervisor will handle failure for its worker processes, but only its own.  Localized and uniform error handling simplifies flow control.  Business logic can also be void of error handling and can be solely written to communicate and acheive business goals.
 
-Both languages rarely deal with specific error handling.  Since exceptions or errors indicate a failure of some type, then the handler needs only make a decision on what to do in case of failure.  This is a much simpler approach.
+Without strategic, localized points to handle the failure, we would need to bubble the error up to another level and would likely add unwanted complexity.
 
-We simplify what an error is by saying an error is anything that makes processing the application impossible. Ruby, as well as Erlang, want throws for expected errors and raises for unexpected errors.  Go shows us a simpler way: an error is an error.
+##### Errors Are Communication Tools
 
-Never have layered try-catches -- only one.  And it has to be at a level where we are in a position to know what to do about it. -- at the "process" or "actor" level
+We've also seen specific conventions for giving humans what they need to diagnose what the heck happened.  Errors should be used as reports for the system and engineers to understand problems.  The system should also send a different error specifically for the user experience.
 
-On top of that, this seems to relate to Go's recommendation of documenting the error cases, and is Design by Contract: https://en.wikipedia.org/wiki/Design_by_contract where pre and post conditions are declared explicitly.
+### Applying the Lessons
 
-##### Error Messages Are Communication Tools
+> Proper error handling is an essential requirement of good software.
+> 
+> Andrew Gerrand
 
-We've also seen specific conventions for giving humans what they need to diagnose what the heck happened.  Having this convention baked in means creating context for human diagnosis is easy.
+http://blog.golang.org/error-handling-and-go
 
 Let's rewrite our Rescuetime code with these principles:
 
-ex3 -- the boundary example; annotate to the philosophies shown above
 
-#### What comes next?
 
-##### Adding more fault-tolerance
+
+
+
+
+
+
+
+ex3
+
+##### Causal Errors for the Consumer and the Engineer
+
+I added pretty backtrace and limited the backtrace by eliminating the ruby gem files from it.  Pretty backtrace also provides variables for better diagnosis of the issue at hand.  I log as well.
+
+The consumer receives an ```eid``` or error identifier.  The presentation of that error is up to the consumer, not the module.
+
+##### Fail Fast in One Way
+
+I treat everything like a crash -- I don't control it.  This is nice because now even errors I don't expect will be treated like errors I do expect.
+
+##### Localized, Single Handler
+
+Done at the module boundary level, and can be fully documented.  This is already how Go's convention is for error documentation.
+
+##### More Levels of Fault Tolerance
+
+Level 1: The user sees no stack traces.  All errors are handled.  The system knows about every error that is handled.  The user always sees some sort of graceful error message.
+
+Level 2: Rate limiting, Circuit Breakers, Timeouts (probably with vertical scaling)
+
+This is the place where failure is a chance to add value.
+
+Level 3: Hardware fault tolerance (scale forces horizontal scaling and fault tolerance)
+
+- Defer the expensive parts: Testing for change of business logic seems to be widely accepted, but anticipating change for failure or scale is not because it is seen as too complex, or expensive.  Point: have a design that can anticipate those problems, and defer the expensive parts until you need them.
 
 There is so much more to do for a fault-tolerant, scalable distributed system -- circuit breakers, rate limiting, request tracing, sharding -- implementing all of them would probably cost too much for most applications starting out.  But with the boundary in place, it is obvious where all of that should be included in the application.  Instead of large refactorings and rewrites, we are in a place to easily include and share these patterns.
 
 ex4 -- spike to show sharding and circuit breakers
 
-##### Homeostasis
 
-Homeostasis is the property of a system to self-heal.
+##### Error has been simplified
 
-Erlang also expects autonomous recovery to a point -- software isn't really scalable if it fails often and requires human intervention every time.
+Before, how we handled error, and all the use cases weren't documented and seemed insurmountable.  Now, failure cases are explicit and can be put in the sights of the business to define use cases around partially or fully degraded service.
 
 
+#### Sources
+
+http://devblog.avdi.org/2014/05/21/jim-weirich-on-exceptions/
 
 
 

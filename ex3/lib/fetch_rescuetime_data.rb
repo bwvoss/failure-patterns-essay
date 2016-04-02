@@ -3,7 +3,9 @@ require 'httparty'
 
 class RescuetimeData
   def self.fetch(datetime)
-    response = request(datetime)
+    formatted_date = format_date(datetime)
+
+    response = request(formatted_date)
 
     response.fetch('rows').map do |row|
       {
@@ -17,13 +19,16 @@ class RescuetimeData
     end
   end
 
+  def self.format_date(datetime)
+    datetime.strftime('%Y-%m-%d')
+  end
+
   def self.request(datetime)
-    formatted_date = datetime.strftime('%Y-%m-%d')
     url =
       "#{ENV['RESCUETIME_API_URL']}?"\
       "key=#{ENV['RESCUETIME_API_KEY']}&"\
-      "restrict_begin=#{formatted_date}&"\
-      "restrict_end=#{formatted_date}&"\
+      "restrict_begin=#{datetime}&"\
+      "restrict_end=#{datetime}&"\
       'perspective=interval&'\
       'resolution_time=minute&'\
       'format=json'

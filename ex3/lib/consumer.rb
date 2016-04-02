@@ -2,10 +2,7 @@ require 'boundary'
 require 'fetch_rescuetime_data'
 
 module Consumer
-  def get
-    result, error = Boundary.call do
-      RescuetimeData.fetch
-    end
-    # either raise error, or just return it and have the web handle it
+  def get(datetime)
+    result, error = Boundary.call { RescuetimeData.fetch(datetime) }
   end
 end

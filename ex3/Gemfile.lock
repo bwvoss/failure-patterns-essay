@@ -8,6 +8,7 @@ GEM
       thread_safe (~> 0.3, >= 0.3.4)
       tzinfo (~> 1.1)
     coderay (1.1.0)
+    debug_inspector (0.0.2)
     diff-lcs (1.2.5)
     httparty (0.10.2)
       multi_json (~> 1.0)
@@ -18,6 +19,8 @@ GEM
     minitest (5.8.4)
     multi_json (1.11.2)
     multi_xml (0.5.5)
+    pretty_backtrace (0.1.3)
+      debug_inspector (~> 0.0.1)
     pry (0.10.3)
       coderay (~> 1.1.0)
       method_source (~> 0.8.1)
@@ -46,6 +49,7 @@ PLATFORMS
 DEPENDENCIES
   activesupport (~> 4.2.4)
   httparty (~> 0.10.0)
+  pretty_backtrace
   pry
   rspec (~> 3.3.0)
 

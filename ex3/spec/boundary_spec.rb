@@ -1,24 +1,32 @@
 require 'boundary'
-require 'fetch_rescuetime_data'
 
 describe Boundary do
   it 'returns the generic error' do
-    result, error = described_class.call { 5/0 }
+    result, error = described_class.run { 5/0 }
+
+    expect(error).to eq(:default)
+  end
+
+  it 'returns the generic error with custom config' do
+    error_config = [{ matcher: 'something', eid: :test}]
+    result, error = described_class.run { 5/0 }
 
     expect(error).to eq(:default)
   end
 
   it 'returns the result' do
-    result, error = described_class.call { 1 + 1 }
+    result, error = described_class.run { 1 + 1 }
 
     expect(result).to eq(2)
   end
 
-  context 'RescuetimeData specific feedback' do
-    it 'returns a different result for date invalid errors' do
-      result, error = described_class.call { RescuetimeData.fetch('not-a-date') }
+  it 'returns the specific error' do
+    error_config = [{ matcher: 'divided by 0', eid: :bad_math }]
 
-      expect(error).to eq(:invalid_date)
+    result, error = described_class.run(error_config) do
+      5/0
     end
+
+    expect(error).to eq(:bad_math)
   end
 end

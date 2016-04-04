@@ -1,8 +1,13 @@
 require 'boundary'
-require 'fetch_rescuetime_data'
+require 'rescuetime/fetch'
+require 'rescuetime/error_configuration'
 
-module Consumer
+class Consumer
+  attr_reader :result, :error
+
   def get(datetime)
-    result, error = Boundary.call { RescuetimeData.fetch(datetime) }
+    @result, @error = Boundary.run(Rescuetime::ErrorConfiguration) do
+      Rescuetime::Fetch.call(datetime)
+    end
   end
 end

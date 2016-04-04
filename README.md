@@ -350,22 +350,152 @@ http://blog.golang.org/error-handling-and-go
 
 Let's rewrite our Rescuetime code with these principles:
 
+```ruby
+require 'boundary'
+require 'rescuetime/fetch'
 
+class Consumer
+  attr_reader :result, :error
 
+  def get(datetime)
+    @result, @error = Boundary.run(error_config) do
+      Rescuetime::Fetch.call(datetime)
+    end
+  end
 
-##### Causal Errors for the Consumer and the Engineer
+  private
 
-I added pretty backtrace and limited the backtrace by eliminating the ruby gem files from it.  Pretty backtrace also provides variables for better diagnosis of the issue at hand.  I log as well.
+  def error_config
+    [
+      { matcher: '# key not found', eid: :invalid_api_key },
+      { matcher: 'format_date', eid: :invalid_date }
+    ]
+  end
+end
+```                                                      
 
-The consumer receives an ```eid``` or error identifier.  The presentation of that error is up to the consumer, not the module.
+Think of the consumer as an HTTP client.  Like in Go, two variables are returned: the result, or an error.  If there is no error, the value is nil.  I didn't really do much with the error here, but if it is an http application, assume the view will know how to render an error variable.
 
-##### Fail Fast in One Way
+Here's what the Boundary looks like:
 
-I treat everything like a crash -- I don't control it.  This is nice because now even errors I don't expect will be treated like errors I do expect.
+```ruby
+require 'boundary/error'                          
+require 'boundary/logger'
 
-##### Localized, Single Handler
+module Boundary
+  def self.run(error_configuration = [])
+    begin
+      [yield, nil]
+    rescue => e
+      error = Error.new(e, error_configuration)
+      Logger.error(error.system_error_information)
 
-Done at the module boundary level, and can be fully documented.  This is already how Go's convention is for error documentation.
+      [nil, error.user_error_information]
+    end
+  end
+end
+```
+
+The ```Boundary``` is the only place error handling exists.  It is localized only to the Rescuetime fetch call.  If an error is rescued, we log system specific information for developers to see and we return information for the consumer to use. 
+
+The ```Error``` abstraction is responsible for composing errors for a specific consumer.
+
+```ruby
+require 'pretty_backtrace'                    
+PrettyBacktrace.enable
+PrettyBacktrace.multi_line = true
+
+module Boundary
+  class Error < RuntimeError
+    attr_reader :error
+  
+    def initialize(error, error_configs)
+      @error = error   
+      @error_configs = error_configs
+    end
+
+    def default_error_config
+      { eid: :default }
+    end
+
+    def system_error_information
+      error.backtrace[0...5]
+    end
+
+    def user_error_information
+      eid
+    end
+
+    private
+
+    def eid
+      backtrace = error.backtrace[0...5].join(',')
+
+      @error_configs.find(lambda{ default_error_config }) do |c|
+        backtrace.include?(c[:matcher])
+      end[:eid]
+    end
+  end
+end                                                             
+```
+
+For the system side, I used the pretty_backtrace gem which returns the backtrace with line numbers, code and variable values, and I limit it to the first 5 lines to help developers parse the information.
+
+I didn't explore it much further, but the error itself should probably be returned, and more exploration to the amount and format of the backtrace is another avenue for good ideas.
+
+The ```user_error_information``` just returns an error identifier, or ```eid```.  The user experience is up to the consumer, and higher up in the application.  The error identifier protects the amount of information the server leaks while still telling the consumer what happened.
+
+Error configurations can be injected for custom error identifiers to be returned, when the consumer has specific instructions depending on the error.
+
+This is messy, but I just try to find a pattern in the backtrace as a link to an eid.  It will be hard to maintain in the future, but works for now.
+
+There are no guards, throws or raises in the business logic, and looks like the first day when we only cared about the happy path:
+
+```ruby
+require 'active_support/core_ext/time/calculations.rb'                                                   
+require 'httparty'
+require 'time'
+
+module Rescuetime
+  class Fetch
+    def self.call(datetime)
+      formatted_date = format_date(datetime)
+    
+      response = request(formatted_date)
+    
+      response.fetch('rows').map do |row|
+        {
+          date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,   
+          time_spent_in_seconds: row[1],
+          number_of_people:      row[2],
+          activity:              row[3],
+          category:              row[4],
+          productivity:          row[5]
+        }
+      end
+    end 
+
+    def self.format_date(datetime)
+      Time.parse(datetime).strftime('%Y-%m-%d')
+    end
+                                                  
+    def self.request(datetime)              
+      url =                                 
+        "#{ENV['RESCUETIME_API_URL']}?"\    
+        "key=#{ENV['RESCUETIME_API_KEY']}&"\
+        "restrict_begin=#{datetime}&"\        
+        "restrict_end=#{datetime}&"\          
+        'perspective=interval&'\              
+        'resolution_time=minute&'\          
+        'format=json'
+
+      HTTParty.get(url)
+    end
+  end
+end                                         
+```ruby
+
+I like where this is headed -- there is a single, localized place to handle error, the happy path is clear and void of failure logic, and we have a place to add and refactor for failure cases.
 
 ### More Levels of Fault Tolerance
 

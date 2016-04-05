@@ -17,7 +17,7 @@ class Consumer
 
   def error_config
     [
-      { matcher: 'FormatDate', eid: :invalid_date },
+      #{ matcher: 'FormatDate', eid: :invalid_date },
       { action: 'FetchRows', qualifier: lambda { |e| e.inspect == "# key is invalid" }, eid: :invalid_api_key }
     ]
   end

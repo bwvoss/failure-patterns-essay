@@ -70,7 +70,7 @@ def self.fetch(datetime)
 
 The consumer (here it is some sort of HTTP client) has to also be able to respond to nil:
 
-```ruby
+```ruby{3}
 def get
 	response = RescuetimeFetch.request(params[:datetime])
 	

@@ -11,7 +11,7 @@ class Error
   end
 
   def system_error_information
-    error.backtrace[0...5]
+    { error: @error.inspect, backtrace: error.backtrace[0...5], eid: @eid }
   end
 
   def user_error_information

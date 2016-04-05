@@ -149,6 +149,7 @@ end
 ```ruby
 require 'active_support/core_ext/time/calculations.rb'
 require 'httparty'
+require 'time'
 
 class RescuetimeData
   def self.fetch(datetime)
@@ -170,7 +171,7 @@ class RescuetimeData
 
   def self.request(datetime)
     begin
-      formatted_date = DateTime.parse(datetime).strftime('%Y-%m-%d')
+      formatted_date = Time.parse(datetime).strftime('%Y-%m-%d')
     rescue => e
       return { error: "not a real date" }
     end
@@ -191,16 +192,9 @@ class RescuetimeData
 end
 ```
 
-What we've done is a very natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.  It seems reasonable, but let's look at some patterns in the code and progression:
+What we've done is a very natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.
 
-1. Failure becomes more complex as the system grows
-2. If 1 is true, then failures are less complex in smaller systems
-3. Handling failure adds complexity and cost to the system
-4. If 1 and 3 are true, then the larger the system gets, the more complex and costly failure handling will become
-5. The system will still be used by customers even if it is experiencing partial or total failure.
-6. If 5 is true, then the product should be expected to satisfy a set of use cases during failure.
-
-We can see these patterns hold: there is nearly the same amount of error handling code as we do happy path code, and we are only handling a fraction of all possible errors.  Our module's post-conditions are complex:  sometimes we return nil, an object that has a message for the user or the real value. Sometimes we use begin/rescue for flow control.  Sometimes we use conditionals -- and this is only the first round of fixes based on failure.
+There is nearly the same amount of error handling code as we do happy path code, and we are only handling a fraction of all possible errors.  Our module's post-conditions are complex:  sometimes we return nil, an object that has a message for the user or the real value. Sometimes we use begin/rescue for flow control.  Sometimes we use conditionals -- and this is only the first round of fixes based on failure.
 
 The error handling we did put in place, though, allows graceful degredation of certain features, allowing the user to properly use the application in some capacity.  The negative to this, though, is that by capturing errors and not re-raising them, we lose the transparency and metrics exception notification provides.
 
@@ -493,35 +487,27 @@ module Rescuetime
     end
   end
 end                                         
-```ruby
+```
 
 I like where this is headed -- there is a single, localized place to handle error, the happy path is clear and void of failure logic, and we have a place to add and refactor for failure cases.
 
-### More Levels of Fault Tolerance
+There are still a number of questions, though, specifically about figuring out what the specific problem is, and as we grow, how easy it will be to share error handling logic.
 
-The user sees no stack traces.  All errors are handled.  The system knows about every error that is handled.  The user always sees some sort of graceful error message.  Now we've grown to a point where we are seeing some more exotic errors.
+TODO:
 
-There is a lot to application stability than simply rescuing errors.  There are circuit breakers, rate limiters, timeouts, semaphores and hardware sharding.  This is where stuff gets more expensive and difficult to change, but for us, we know exactly where it goes.  Let's add a circuit breaker and a timeout for the HTTP request:
+- look into what collection pipelining would do to resolve the issue of figuring out what really went wrong.  Make one item in the collection have one reason to fail.
+- Fault tolerance at scale
+
+### Fault Tolerance At Scale
+
+There is a lot to application stability than simply rescuing errors.  There are circuit breakers, rate limiters, timeouts, semaphores and sharding.  This is where stuff gets more expensive and difficult to change, but for us, we know exactly where it goes.  Let's add a circuit breaker and a timeout for the HTTP request:
 
 
-ex4 -- show circuit breakers and timeouts
+ex4 -- show circuit breakers and timeouts; and more complicated failure responses
 
 This is the place where failure is a chance to add value.
 
-- Defer the expensive parts: Testing for change of business logic seems to be widely accepted, but anticipating change for failure or scale is not because it is seen as too complex, or expensive.  Point: have a design that can anticipate those problems, and defer the expensive parts until you need them.
-
-There is so much more to do for a fault-tolerant, scalable distributed system -- circuit breakers, rate limiting, request tracing, sharding -- implementing all of them would probably cost too much for most applications starting out.  But with the boundary in place, it is obvious where all of that should be included in the application.  Instead of large refactorings and rewrites, we are in a place to easily include and share these patterns.
-
-
-##### Error has been simplified
-
-Before, how we handled error, and all the use cases weren't documented and seemed insurmountable.  Now, failure cases are explicit and can be put in the sights of the business to define use cases around partially or fully degraded service.
-
-##### How this relates to Reactive Programming
-
-"Reactive Programming raises the level of abstraction of your code so you can focus on the interdependence of events that define the business logic, rather than having to constantly fiddle with a large amount of implementation details." https://gist.github.com/staltz/868e7e9bc2a7b8c1f754
-
-Maybe get into collection pipelines with logging?  How the structure of your application makes it easier to do, like reactive functional programming.
+Defer the expensive parts: instead of large refactorings and rewrites, we are in a place to easily include and share these patterns.
 
 ##### Moving to Smarter Error Response
 
@@ -530,6 +516,8 @@ http://githubengineering.com/exception-monitoring-and-response/
 #### Sources
 
 http://devblog.avdi.org/2014/05/21/jim-weirich-on-exceptions/
+
+https://blog.golang.org/errors-are-values
 
 
 

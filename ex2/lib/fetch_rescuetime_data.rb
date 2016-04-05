@@ -1,5 +1,6 @@
 require 'active_support/core_ext/time/calculations.rb'
 require 'httparty'
+require 'time'
 
 class RescuetimeData
   def self.fetch(datetime)
@@ -21,7 +22,7 @@ class RescuetimeData
 
   def self.request(datetime)
     begin
-      formatted_date = DateTime.parse(datetime).strftime('%Y-%m-%d')
+      formatted_date = Time.parse(datetime).strftime('%Y-%m-%d')
     rescue => e
       return { error: "not a real date" }
     end

@@ -196,7 +196,7 @@ What we've done is a very natural progression in most projects: get the happy pa
 
 There is nearly the same amount of error handling code as we do happy path code, and we are only handling a fraction of all possible errors.  Our module's post-conditions are complex:  sometimes we return nil, an object that has a message for the user or the real value. Sometimes we use begin/rescue for flow control.  Sometimes we use conditionals -- and this is only the first round of fixes based on failure.
 
-The error handling we did put in place, though, allows graceful degredation of certain features, allowing the user to properly use the application in some capacity.  The negative to this, though, is that by capturing errors and not re-raising them, we lose the transparency and metrics exception notification provides.
+The error handling we did put in place, though, allows graceful degredation of certain features to give the user something to do.  The negative to this, though, is that by capturing errors and not re-raising them, we lose the transparency and metrics exception notification provides.
 
 ### How To Handle Failure
 
@@ -491,17 +491,22 @@ end
 
 I like where this is headed -- there is a single, localized place to handle error, the happy path is clear and void of failure logic, and we have a place to add and refactor for failure cases.
 
-There are still a number of questions, though, specifically about figuring out what the specific problem is, and as we grow, how easy it will be to share error handling logic.
+There are still a number of questions, though, specifically about figuring out what the specific problem is (maybe combine with the error itself?), and as we grow, how easy it will be to share error handling logic.
 
 TODO:
 
 - look into what collection pipelining would do to resolve the issue of figuring out what really went wrong.  Make one item in the collection have one reason to fail.
-- Fault tolerance at scale
+- Fault tolerance at scale; and show that fault tolerance is orthogonal to scale.
 
 ### Fault Tolerance At Scale
 
-There is a lot to application stability than simply rescuing errors.  There are circuit breakers, rate limiters, timeouts, semaphores and sharding.  This is where stuff gets more expensive and difficult to change, but for us, we know exactly where it goes.  Let's add a circuit breaker and a timeout for the HTTP request:
+Now we enter the part that most people consider fault tolerance.  "Simply catching errors isn't fault tolerance!  Where is the hardware redundancy and hot backups!" they may say.  For most people, fault tolerance is coupled to scale.
 
+While it is true that total fault tolerance must handle hardware failure, we wouldn't be fault tolerant without the foundation we've set, and in many ways, while scale breeds more exotic reasons to fail, fault tolerance is orthogonal to scale.  And for small applications, it is OK to defer more expensive stability measures until operating at scale.
+
+Circuit breakers, rate limiters, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.  
+
+Let's add a circuit breaker and a timeout for the HTTP request:
 
 ex4 -- show circuit breakers and timeouts; and more complicated failure responses
 
@@ -512,6 +517,10 @@ Defer the expensive parts: instead of large refactorings and rewrites, we are in
 ##### Moving to Smarter Error Response
 
 http://githubengineering.com/exception-monitoring-and-response/
+
+### Conclusion
+
+By making a few smart design decisions early on in a project, we can handle failure in an elegant, controlled manner.  Failure at scale becomes more manageable, and these principles can apply to any language.
 
 #### Sources
 

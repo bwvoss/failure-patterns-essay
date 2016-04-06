@@ -12,7 +12,7 @@ module Boundary
     end
 
     def default_error_config
-      { eid: :default }
+      { i18n: :default }
     end
 
     def system_error_information
@@ -20,17 +20,17 @@ module Boundary
     end
 
     def user_error_information
-      eid
+      i18n
     end
 
     private
 
-    def eid
+    def i18n
       backtrace = error.backtrace[0...5].join(',')
 
       @error_configs.find(lambda{ default_error_config }) do |c|
         backtrace.include?(c[:matcher])
-      end[:eid]
+      end[:i18n]
     end
   end
 end

@@ -7,6 +7,6 @@ describe Boundary::Error do
   end
 
   context 'user specific error' do
-    it 'returns an error id'
+    it 'returns an i18n key'
   end
 end

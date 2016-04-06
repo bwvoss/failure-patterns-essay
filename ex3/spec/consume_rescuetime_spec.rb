@@ -4,13 +4,13 @@ describe 'Consuming Rescuetime' do
   let(:consumer) { Consumer.new }
 
   context 'user specific feedback' do
-    it 'returns eid for date invalid errors' do
+    it 'returns i18n for date invalid errors' do
       consumer.get('not-a-date')
 
       expect(consumer.error).to eq(:invalid_date)
     end
 
-    it 'returns eid for invalid api key' do
+    it 'returns i18n for invalid api key' do
       expect(HTTParty).to receive(:get) do
         {
           error: '# key not found',

@@ -1,48 +1,39 @@
 require 'active_support/core_ext/time/calculations.rb'
 require 'httparty'
 require 'time'
+require 'boundary'
 
 module Rescuetime
-  Pipeline = [
-    FormatDate,
-    BuildUrl,
-    Request,
-    FetchRows,
-    ParseRows
-  ]
+  class Pipeline
+    extend Boundary
 
-  class FormatDate
-    def self.call(datetime)
-      Time.parse(datetime).strftime('%Y-%m-%d')
+    def initialize(time)
+      @result = time
     end
-  end
 
-  class BuildUrl
-    def self.call(datetime)
+    def format_date(time)
+      Time.parse(time).strftime('%Y-%m-%d')
+    end
+
+    def build_url(date)
       "#{ENV.fetch('RESCUETIME_API_URL')}?"\
       "key=#{ENV.fetch('RESCUETIME_API_KEY')}&"\
-      "restrict_begin=#{datetime}&"\
-      "restrict_end=#{datetime}&"\
+      "restrict_begin=#{date}&"\
+      "restrict_end=#{date}&"\
       'perspective=interval&'\
       'resolution_time=minute&'\
       'format=json'
     end
-  end
 
-  class Request
-    def self.call(url)
+    def request(url)
       HTTParty.get(url)
     end
-  end
 
-  class FetchRows
-    def self.call(response)
+    def fetch_rows(response)
       response.fetch('rows')
     end
-  end
 
-  class ParseRows
-    def self.call(rows)
+    def parse_rows(rows)
       timezone = ENV.fetch('RESCUETIME_TIMEZONE')
       rows.map do |row|
         {
@@ -55,5 +46,10 @@ module Rescuetime
         }
       end
     end
+
+    protect! [
+      { method_name: :format_date, i18n: :invalid_date},
+      { method_name: :fetch_rows, i18n: :invalid_api_key, extra: lambda { |data, error|  data[:error] == "# key not found" } }
+    ]
   end
 end

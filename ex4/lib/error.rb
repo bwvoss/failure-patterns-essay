@@ -5,16 +5,16 @@ PrettyBacktrace.multi_line = true
 class Error
   attr_reader :error
 
-  def initialize(error, eid)
+  def initialize(error, i18n)
     @error = error
-    @eid = eid
+    @i18n = i18n
   end
 
   def system_error_information
-    { error: @error.inspect, backtrace: error.backtrace[0...5], eid: @eid }
+    { error: @error.inspect, backtrace: error.backtrace[0...5], i18n: @i18n }
   end
 
   def user_error_information
-    @eid
+    @i18n
   end
 end

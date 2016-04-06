@@ -8,7 +8,7 @@ describe Boundary do
   end
 
   it 'returns the generic error with custom config' do
-    error_config = [{ matcher: 'something', eid: :test}]
+    error_config = [{ matcher: 'something', i18n: :test}]
     result, error = described_class.run { 5/0 }
 
     expect(error).to eq(:default)
@@ -21,7 +21,7 @@ describe Boundary do
   end
 
   it 'returns the specific error' do
-    error_config = [{ matcher: 'divided by 0', eid: :bad_math }]
+    error_config = [{ matcher: 'divided by 0', i18n: :bad_math }]
 
     result, error = described_class.run(error_config) do
       5/0

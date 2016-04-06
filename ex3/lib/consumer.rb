@@ -14,8 +14,8 @@ class Consumer
 
   def error_config
     [
-      { matcher: '# key not found', eid: :invalid_api_key },
-      { matcher: 'format_date', eid: :invalid_date }
+      { matcher: '# key not found', i18n: :invalid_api_key },
+      { matcher: 'format_date', i18n: :invalid_date }
     ]
   end
 end

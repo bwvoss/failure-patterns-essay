@@ -1,26 +1,35 @@
-require 'boundary_error'
+require 'error_handler'
 require 'logger'
 
-class Boundary
-  def initialize(pipeline, data, error_configuration)
-    @pipeline = pipeline
-    @data = data
-    @error_config = error_config
-  end
+module Boundary
+  def protect!(on_error_config = [])
+    methods = instance_methods - Object.instance_methods
+    error_handler = ErrorHandler.new(on_error_config)
 
-  def run
-    begin
-      result = @pipeline.reduce(@data) do |data, action|
-        @action = action
-        action.call(data)
+    define_method("final") do |*args, &block|
+      return @final_value
+    end
+
+    methods.each do |method|
+      define_method("protected_#{method}") do
+        return self if @failed
+
+        begin
+          @result = __send__("original_#{method}", @result)
+          @final_value = [@result, nil]
+        rescue => e
+          @failed = true
+          error = error_handler.error_for(e, method, @result)
+          Logger.error(error.system_error_information)
+
+          @final_value = [nil, error.user_error_information]
+        end
+
+        self
       end
 
-      [result, nil]
-    rescue => e
-      error = @error_config.error_for(e, @action)
-      Logger.error(error.system_error_information)
-
-      [nil, error.user_error_information]
+      alias_method "original_#{method}", method
+      alias_method method, "protected_#{method}"
     end
   end
 end

@@ -1,24 +1,44 @@
 require 'error'
 
 class ErrorHandler
+  DEFAULT_CONFIG = { i18n: :default }
+
   def initialize(config)
     @config = config
   end
 
-  def default_error_config
-    { eid: :default }
-  end
-
-  def error_for(e, action)
-    eid = eid_for(e, action)
-    Error.new(e, eid)
+  def error_for(e, method, result)
+    i18n = i18n_for(e, method, result)
+    Error.new(e, i18n)
   end
 
   private
 
-  def eid_for(e, action)
-    @config.find(lambda { default_error_config } ) do |c|
-      c[:action] == action
-    end[:eid]
+  def i18n_for(e, method, result)
+    extra_config = extra_for(e, method, result)
+
+    if extra_config
+      return extra_config[:i18n]
+    else
+      default_for(method)
+    end
+  end
+
+  def extra_for(e, method, result)
+    extras = @config.select do |c|
+      c[:method_name] == method && c[:extra]
+    end
+
+    if extras
+      extras.find do |c|
+        c[:extra].call(result, e)
+      end
+    end
+  end
+
+  def default_for(method)
+    @config.find(lambda { DEFAULT_CONFIG }) do |c|
+      c[:method_name] == method && !c[:extra]
+    end[:i18n]
   end
 end

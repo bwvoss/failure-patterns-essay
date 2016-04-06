@@ -40,7 +40,7 @@ class RescuetimeData
 end
 
 ```
-*[ex1 and tests](http://github.com)*
+[ex1 and tests](http://github.com)
 
 This is nice enough. The business logic is clear. The tests clearly describe the behavior.
 
@@ -70,7 +70,7 @@ def self.fetch(datetime)
 
 The consumer (here it is some sort of HTTP client) has to also be able to respond to nil:
 
-```ruby{3}
+```ruby
 def get
 	response = RescuetimeFetch.request(params[:datetime])
 	
@@ -191,6 +191,7 @@ class RescuetimeData
   end
 end
 ```
+[ex2 and tests](http://github.com)
 
 What we've done is a very natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.
 
@@ -203,8 +204,10 @@ The error handling we did put in place, though, allows graceful degredation of c
 Unless we stop and consider some basic error handling abstractions, more modules will be added to the system and are doomed to repeat the above process.  The larger the system gets, the more we will be unable to safely and clearly apply many levels of fault tolerance.  What we need is to learn about how to handle failure a more mature way. 
 
 > While few people would claim the software they produce and the hardware it runs on never fails, it is not uncommon to design a software architecture under the presumption that everything will work.
+> 
+> Craig Stuntz
 
-http://web.archive.org/web/20090430014122/http://nplus1.org/articles/a-crash-course-in-failure/
+[src](http://web.archive.org/web/20090430014122/http://nplus1.org/articles/a-crash-course-in-failure/)
 
 #### Go
 
@@ -212,7 +215,7 @@ http://web.archive.org/web/20090430014122/http://nplus1.org/articles/a-crash-cou
 
 > Alan A. A. Donovan and Brian W. Kernighan
 
-http://www.amazon.com/Programming-Language-Addison-Wesley-Professional-Computing-ebook/dp/B0184N7WWS
+[src](http://www.amazon.com/Programming-Language-Addison-Wesley-Professional-Computing-ebook/dp/B0184N7WWS)
 
 ##### Explicit Errors
 
@@ -226,8 +229,7 @@ if err != nil {
     log.Fatal(err)
 }
 ```
-
-http://blog.golang.org/error-handling-and-go
+[src](http://blog.golang.org/error-handling-and-go)
 
 Explicitly returning errors demands the error receives attention.  Coupled with Go's static typing, errors need to be explicitly ignored.  As an added benefit, the user will less likely be randomly subjected to stack traces. 
 
@@ -249,7 +251,7 @@ A chain of strings is an easy data structure to scan or grep, and gives a uni-di
 > 
 > Fred Hebert
 
-http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG
+[src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
 Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Let's explore why Erlang is so good at dealing with failure.
 
@@ -261,7 +263,13 @@ Erlang/OTP applications are usually represented as a tree structure, where one p
 
 The supervisor is responsible for observing and orchestrating the workers, which should do the bulk of the business processing.  When a process encounters an issue, Erlang's philosophy is to let it crash, or fail fast. Erlang/OTP systems _expect_ error to occur and build handling into the supervisor.
 
-Coming from a defensive programming mindset, this may seem outright dangerous.  But Erlang believes failing processes quickly helps avoid data corruption and transient bugs that commonly cause system crashes at scale, and forces confronting error earlier rather than later.
+> Engineers are not conditioned to embrace their ability to respond to emergencies; they aim to avoid them altogether
+> 
+> John Allspaw
+
+[src](http://queue.acm.org/detail.cfm?id=2353017)
+
+Coming from a defensive programming mindset, this may seem outright dangerous.  But Erlang believes failing processes quickly helps avoid data corruption and transient bugs that commonly cause system crashes at scale, and forces confronting error earlier rather than later and reducing the fear of system failures.
 
 ##### Links and Monitors
 
@@ -284,7 +292,7 @@ When the monitored process terminates, the monitor will receive this data struct
 ```erlang
 {'DOWN', Ref, process, MonitoredPid, Reason}
 ```
-http://erlang.org/doc/reference_manual/processes.html
+[src](http://erlang.org/doc/reference_manual/processes.html)
 
 Among other things, the monitor will receive a down signal with a reason and the pid that went down.
 
@@ -298,7 +306,7 @@ Keeping error handling in the supervisor encapsulates logic around failure, and 
 > 
 > Joe Armstrong
 
-http://www.se-radio.net/2008/03/episode-89-joe-armstrong-on-erlang/
+[src](http://www.se-radio.net/2008/03/episode-89-joe-armstrong-on-erlang/)
 
 ##### Errors for the System, and Errors for the User
 
@@ -315,6 +323,8 @@ For either party, the goal is a simple user experience.
 > You can try to prevent bugs all you want, but most of the time, some will still creep in.  And even if by some miracle your code doesn't have any bugs, nothing can stop the eventual hardware failure.  Therefore, the idea is to find good ways to handle errors and problems, rather than trying to prevent them all.
 > 
 > Fred Hebert
+
+[src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
 Error handling is foundational in both Go's and Erlang's designs and philosophies.  Ignoring failure is close to impossible.
 
@@ -340,7 +350,7 @@ Failing in one way and having that failure handled in one place encapsulates wha
 > 
 > Andrew Gerrand
 
-http://blog.golang.org/error-handling-and-go
+[src](http://blog.golang.org/error-handling-and-go)
 
 Let's rewrite our Rescuetime code with these principles:
 
@@ -361,8 +371,8 @@ class Consumer
 
   def error_config
     [
-      { matcher: '# key not found', eid: :invalid_api_key },
-      { matcher: 'format_date', eid: :invalid_date }
+      { matcher: '# key not found', i18n: :invalid_api_key },
+      { matcher: 'format_date', i18n: :invalid_date }
     ]
   end
 end
@@ -409,7 +419,7 @@ module Boundary
     end
 
     def default_error_config
-      { eid: :default }
+      { i18n: :default }
     end
 
     def system_error_information
@@ -417,7 +427,7 @@ module Boundary
     end
 
     def user_error_information
-      eid
+      i18n
     end
 
     private
@@ -427,7 +437,7 @@ module Boundary
 
       @error_configs.find(lambda{ default_error_config }) do |c|
         backtrace.include?(c[:matcher])
-      end[:eid]
+      end[:i18n]
     end
   end
 end                                                             
@@ -437,9 +447,9 @@ For the system side, I used the pretty_backtrace gem which returns the backtrace
 
 I didn't explore it much further, but the error itself should probably be returned, and more exploration to the amount and format of the backtrace is another avenue for good ideas.
 
-The ```user_error_information``` just returns an error identifier, or ```eid```.  The user experience is up to the consumer, and higher up in the application.  The error identifier protects the amount of information the server leaks while still telling the consumer what happened.
+The ```user_error_information``` just returns an an i18n key for internationalization.  The user experience is up to the consumer, and higher up in the application.  Returning an internationalization key explicitly tells the reader that we are returning something for the user to see, and protects information leaks.
 
-Error configurations can be injected for custom error identifiers to be returned, when the consumer has specific instructions depending on the error.
+Error configurations can be injected for custom i18n keys to be returned, when the consumer has specific instructions depending on the error.
 
 This is messy, but I just try to find a pattern in the backtrace as a link to an eid.  It will be hard to maintain in the future, but works for now.
 
@@ -488,15 +498,251 @@ module Rescuetime
   end
 end                                         
 ```
+[ex3 and tests](http://github.com)
 
 I like where this is headed -- there is a single, localized place to handle error, the happy path is clear and void of failure logic, and we have a place to add and refactor for failure cases.
 
-There are still a number of questions, though, specifically about figuring out what the specific problem is (maybe combine with the error itself?), and as we grow, how easy it will be to share error handling logic.
+There is still a big pain point: I'm finding out what happend by matching a pattern to the backtrace.  While this may be ok for now, it's a bit cumbersome to understand, and I think we'll have big problems with it the larger the system gets.
 
-TODO:
+### Design Principles for Easier Failure Identification
 
-- look into what collection pipelining would do to resolve the issue of figuring out what really went wrong.  Make one item in the collection have one reason to fail.
-- Fault tolerance at scale; and show that fault tolerance is orthogonal to scale.
+#### Collection Pipelining
+
+A collection pipeline is a pattern where the output of one function is the input into the next function.  Functions can then be chained together in a highly readable, functional way.
+
+It is a prevelent and powerful programming paradigm -- this may look familiar:
+
+```bash
+cat items.txt | sort | uniq | less | grep "find me?"
+```
+
+Here is an example of Javascript as a collection pipeline using the [RxJS](https://github.com/Reactive-Extensions/RxJS) library, a library for functional reactive programming:
+
+```javascript
+const subscription = getAsyncStockData()
+  .filter(quote => quote.price > 30)
+  .map(quote => quote.price)
+  .subscribe(
+    price => console.log(`Prices higher than $30: ${price}`),
+    err => console.log(`Something went wrong: ${err.message}`); // error handler
+  );
+```
+[src](https://github.com/Reactive-Extensions/RxJS)
+
+This looks a lot like Ruby's method chaining!  But let's look a bit closer: every action in the sequence is small and they do one thing only, and there is a single error handler for the entire chain of execution.
+
+This sort of design could work -- it looks like conventional ruby, and we can scope error handling to a single statement in the flow.  But how can we implement this?
+
+#### Aspect-Oriented Programming
+[Aspect-Oriented Programming](https://en.wikipedia.org/wiki/Aspect-oriented_programming) is a programming paradigm that adds behavior to existing code without modifying the original structure of that code.  An "advice" in AOP is a function that modifies the behavior of another function when it is run.
+
+AOP is designed to allow a program to add concerns that are not vital to business logic to be added without polluting the business logic.  This is exactly what we have been trying to do the whole time!  Keep the happy path clear, but don't forget about the other core utilities the application needs to run.
+
+Most languages need some extra tooling to make this happen.  But in Ruby, we have metaprogramming.
+
+### Time To Refactor: Playing to Ruby's Strengths
+
+Metaprogramming makes AOP easy to implement -- no extra libraries or frameworks needed and method chaining as a collection pipeline is a conventional pattern.  Let's take another crack at the code:
+
+```ruby
+require 'boundary'
+require 'error_handler'
+require 'rescuetime/pipeline'
+
+class Consumer
+  attr_reader :result, :error
+
+  def get(datetime)
+    @result, @error =
+      Rescuetime::Pipeline.new(datetime)
+        .format_date
+        .build_url
+        .request
+        .fetch_rows
+        .parse_rows
+        .final
+  end
+end
+```
+
+This cleaned up very nicely, I really like it.  Let's take a look at the pipeline:
+
+```ruby
+require 'active_support/core_ext/time/calculations.rb'
+require 'httparty'
+require 'time'
+require 'boundary'
+
+module Rescuetime
+  class Pipeline
+    extend Boundary
+
+    def initialize(time)
+      @result = time
+    end
+
+    def format_date(time)
+      Time.parse(time).strftime('%Y-%m-%d')
+    end
+
+    def build_url(date)
+      "#{ENV.fetch('RESCUETIME_API_URL')}?"\
+      "key=#{ENV.fetch('RESCUETIME_API_KEY')}&"\
+      "restrict_begin=#{date}&"\
+      "restrict_end=#{date}&"\
+      'perspective=interval&'\
+      'resolution_time=minute&'\
+      'format=json'
+    end
+
+    def request(url)
+      HTTParty.get(url)
+    end
+
+    def fetch_rows(response)
+      response.fetch('rows')
+    end
+
+    def parse_rows(rows)
+      timezone = ENV.fetch('RESCUETIME_TIMEZONE')
+      rows.map do |row|
+        {
+          date:                  ActiveSupport::TimeZone[timezone].parse(row[0]).utc.to_s,
+          time_spent_in_seconds: row[1],
+          number_of_people:      row[2],
+          activity:              row[3],
+          category:              row[4],
+          productivity:          row[5]
+        }
+      end
+    end
+
+    protect! [
+      { method_name: :format_date, i18n: :invalid_date},
+      { method_name: :fetch_rows, i18n: :invalid_api_key, extra: lambda { |data, error|  data[:error] == "# key not found" } }
+    ]
+  end
+end
+```
+
+Protect at the bottom, and the initial value getting set to a result instance variable.  Need to call ```final```.  
+
+The ```Boundary``` looks a little crazier, especially with the metaprogramming:
+
+```ruby
+require 'error_handler'
+require 'logger'
+
+module Boundary
+  def protect!(on_error_config = [])
+    methods = instance_methods - Object.instance_methods
+    error_handler = ErrorHandler.new(on_error_config)
+
+    define_method("final") do |*args, &block|
+      return @final_value
+    end
+
+    methods.each do |method|
+      define_method("protected_#{method}") do
+        return self if @failed
+
+        begin
+          @result = __send__("original_#{method}", @result)
+          @final_value = [@result, nil]
+        rescue => e
+          @failed = true
+          error = error_handler.error_for(e, method, @result)
+          Logger.error(error.system_error_information)
+
+          @final_value = [nil, error.user_error_information]
+        end
+
+        self
+      end
+
+      alias_method "original_#{method}", method
+      alias_method method, "protected_#{method}"
+    end
+  end
+end
+```
+
+The ```ErrorHandler```:
+
+```ruby
+require 'error'
+
+class ErrorHandler
+  DEFAULT_CONFIG = { i18n: :default }
+
+  def initialize(config)
+    @config = config
+  end
+
+  def error_for(e, method, result)
+    i18n = i18n_for(e, method, result)
+    Error.new(e, i18n)
+  end
+
+  private
+
+  def i18n_for(e, method, result)
+    extra_config = extra_for(e, method, result)
+
+    if extra_config
+      return extra_config[:i18n]
+    else
+      default_for(method)
+    end
+  end
+
+  def extra_for(e, method, result)
+    extras = @config.select do |c|
+      c[:method_name] == method && c[:extra]
+    end
+
+    if extras
+      extras.find do |c|
+        c[:extra].call(result, e)
+      end
+    end
+  end
+
+  def default_for(method)
+    @config.find(lambda { DEFAULT_CONFIG }) do |c|
+      c[:method_name] == method && !c[:extra]
+    end[:i18n]
+  end
+end
+```
+
+The ```Error``` is unchanged:
+
+```ruby
+require 'pretty_backtrace'
+PrettyBacktrace.enable
+PrettyBacktrace.multi_line = true
+
+class Error
+  attr_reader :error
+
+  def initialize(error, i18n)
+    @error = error
+    @i18n = i18n
+  end
+
+  def system_error_information
+    { error: @error.inspect, backtrace: error.backtrace[0...5], i18n: @i18n }
+  end
+
+  def user_error_information
+    @i18n
+  end
+end
+```
+[ex4 and tests](http://github.com)
+
+If we start operating as a collection pipeline full of single responsibility actions, our error handling code is simplified since there is usually only one reason each one of these methods could fail.
 
 ### Fault Tolerance At Scale
 
@@ -504,7 +750,7 @@ Now we enter the part that most people consider fault tolerance.  "Simply catchi
 
 While it is true that total fault tolerance must handle hardware failure, we wouldn't be fault tolerant without the foundation we've set, and in many ways, while scale breeds more exotic reasons to fail, fault tolerance is orthogonal to scale.  And for small applications, it is OK to defer more expensive stability measures until operating at scale.
 
-Circuit breakers, rate limiters, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.  
+Circuit breakers, rate limiters/controlling backpressure, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.  
 
 Let's add a circuit breaker and a timeout for the HTTP request:
 

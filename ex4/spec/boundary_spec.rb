@@ -1,32 +1,54 @@
 require 'boundary'
+require 'test_doubles/pipeline'
 
 describe Boundary do
-  it 'returns the generic error' do
-    result, error = described_class.run { 5/0 }
+  let(:test_pipeline) do
+    TestDoubles::Pipeline.new(1)
+  end
+
+  it 'returns an error' do
+    result, error = test_pipeline
+      .blow_up
+      .final
 
     expect(error).to eq(:default)
   end
 
-  it 'returns the generic error with custom config' do
-    error_config = [{ matcher: 'something', eid: :test}]
-    result, error = described_class.run { 5/0 }
+  it 'returns an custom i18n key' do
+    result, error = test_pipeline
+      .custom_blow_up
+      .final
 
-    expect(error).to eq(:default)
+    expect(error).to eq(:custom)
   end
 
-  it 'returns the result' do
-    result, error = described_class.run { 1 + 1 }
+  it 'returns an custom i18n key found with extra data' do
+    result, error = TestDoubles::Pipeline.new({})
+      .custom_blow_up
+      .final
+
+    expect(error).to eq(:extra)
+  end
+
+  it 'logs data on error' do
+    expect(Logger).to receive(:error)
+
+    test_pipeline.blow_up.final
+  end
+
+  it 'returns a result' do
+    result, error = test_pipeline.add_1.final
 
     expect(result).to eq(2)
   end
 
-  it 'returns the specific error' do
-    error_config = [{ matcher: 'divided by 0', eid: :bad_math }]
+  it 'method chains' do
+    result, error = test_pipeline
+      .add_1
+      .add_2
+      .times_3
+      .final
 
-    result, error = described_class.run(error_config) do
-      5/0
-    end
-
-    expect(error).to eq(:bad_math)
+    expect(result).to eq(12)
   end
 end

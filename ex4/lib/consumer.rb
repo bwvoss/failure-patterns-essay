@@ -1,6 +1,7 @@
 require 'boundary'
 require 'error_handler'
 require 'rescuetime/pipeline'
+require 'rescuetime/error_handler'
 
 class Consumer
   attr_reader :result, :error
@@ -13,6 +14,6 @@ class Consumer
         .request
         .fetch_rows
         .parse_rows
-        .final
+        .on_error(Rescuetime::ErrorHandler.new)
   end
 end

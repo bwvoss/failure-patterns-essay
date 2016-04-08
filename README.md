@@ -432,7 +432,7 @@ module Boundary
 
     private
 
-    def eid
+    def i18n
       backtrace = error.backtrace[0...5].join(',')
 
       @error_configs.find(lambda{ default_error_config }) do |c|
@@ -500,49 +500,41 @@ end
 ```
 [ex3 and tests](http://github.com)
 
-I like where this is headed -- there is a single, localized place to handle error, the happy path is clear and void of failure logic, and we have a place to add and refactor for failure cases.
+The only difference is I broke out a format_date method so that identifying what the real error was would be easier.  Right now I'm finding out what happend by matching a pattern to the backtrace, and that is easier to do if I encapsulate potential failures with methods of their own.
 
-There is still a big pain point: I'm finding out what happend by matching a pattern to the backtrace.  While this may be ok for now, it's a bit cumbersome to understand, and I think we'll have big problems with it the larger the system gets.
+As it turns out, methods of a single responsibility chained together is a common pattern in a number of programming languages.
 
-### Design Principles for Easier Failure Identification
+### How to Handle Failure: Redux
 
-#### Collection Pipelining
+#### Javascript
 
-A collection pipeline is a pattern where the output of one function is the input into the next function.  Functions can then be chained together in a highly readable, functional way.
+##### Callbacks Per Request
 
-It is a prevelent and powerful programming paradigm -- this may look familiar:
+Javascript often makes asynchronous calls.  Programming for asynchronous systems makes error handling more difficult -- asynchronous execution makes it impossible to program error handling like a blocking language.
 
-```bash
-cat items.txt | sort | uniq | less | grep "find me?"
-```
-
-Here is an example of Javascript as a collection pipeline using the [RxJS](https://github.com/Reactive-Extensions/RxJS) library, a library for functional reactive programming:
+As a simple example, let's look at a common ajax request:
 
 ```javascript
-const subscription = getAsyncStockData()
-  .filter(quote => quote.price > 30)
-  .map(quote => quote.price)
-  .subscribe(
-    price => console.log(`Prices higher than $30: ${price}`),
-    err => console.log(`Something went wrong: ${err.message}`); // error handler
-  );
+$.ajax({
+  url: 'https://my-api.com/results.json',
+  success: successHandler, // defined elsewhere
+  error: errorHandler
+});
+
+console.log('Request sent!')
 ```
-[src](https://github.com/Reactive-Extensions/RxJS)
 
-This looks a lot like Ruby's method chaining!  But let's look a bit closer: every action in the sequence is small and they do one thing only, and there is a single error handler for the entire chain of execution.
+The error handler being scoped to this one function means that it knows exactly what use cases it should handle.  There doesn't have to be any grepping or data manipulation to figure out why an error occurs -- we will write an error handler for one specific request and no others.
 
-This sort of design could work -- it looks like conventional ruby, and we can scope error handling to a single statement in the flow.  But how can we implement this?
+### Lessons
 
-#### Aspect-Oriented Programming
-[Aspect-Oriented Programming](https://en.wikipedia.org/wiki/Aspect-oriented_programming) is a programming paradigm that adds behavior to existing code without modifying the original structure of that code.  An "advice" in AOP is a function that modifies the behavior of another function when it is run.
+##### Error Handling Per Function
 
-AOP is designed to allow a program to add concerns that are not vital to business logic to be added without polluting the business logic.  This is exactly what we have been trying to do the whole time!  Keep the happy path clear, but don't forget about the other core utilities the application needs to run.
+Segmenting and injecting an error handler that can handle on a function-level granularity is a simple and easily understandable approach to identifying the specifics about and responding to a failure.
 
-Most languages need some extra tooling to make this happen.  But in Ruby, we have metaprogramming.
+### Applying The Lessons: Redux
 
-### Time To Refactor: Playing to Ruby's Strengths
-
-Metaprogramming makes AOP easy to implement -- no extra libraries or frameworks needed and method chaining as a collection pipeline is a conventional pattern.  Let's take another crack at the code:
+The first thing I did was break my methods down to the size where there could only be "one" reasons to fail.  If the reasons to fail were orthogonal to one another, they went into separate methdos.  Then I pipelined them together in typical Ruby method-chaining: 
 
 ```ruby
 require 'boundary'
@@ -565,156 +557,36 @@ class Consumer
 end
 ```
 
-This cleaned up very nicely, I really like it.  Let's take a look at the pipeline:
+Let's take a look at the pipeline:
 
-```ruby
-require 'active_support/core_ext/time/calculations.rb'
-require 'httparty'
-require 'time'
-require 'boundary'
-
-module Rescuetime
-  class Pipeline
-    extend Boundary
-
-    def initialize(time)
-      @result = time
-    end
-
-    def format_date(time)
-      Time.parse(time).strftime('%Y-%m-%d')
-    end
-
-    def build_url(date)
-      "#{ENV.fetch('RESCUETIME_API_URL')}?"\
-      "key=#{ENV.fetch('RESCUETIME_API_KEY')}&"\
-      "restrict_begin=#{date}&"\
-      "restrict_end=#{date}&"\
-      'perspective=interval&'\
-      'resolution_time=minute&'\
-      'format=json'
-    end
-
-    def request(url)
-      HTTParty.get(url)
-    end
-
-    def fetch_rows(response)
-      response.fetch('rows')
-    end
-
-    def parse_rows(rows)
-      timezone = ENV.fetch('RESCUETIME_TIMEZONE')
-      rows.map do |row|
-        {
-          date:                  ActiveSupport::TimeZone[timezone].parse(row[0]).utc.to_s,
-          time_spent_in_seconds: row[1],
-          number_of_people:      row[2],
-          activity:              row[3],
-          category:              row[4],
-          productivity:          row[5]
-        }
-      end
-    end
-
-    protect! [
-      { method_name: :format_date, i18n: :invalid_date},
-      { method_name: :fetch_rows, i18n: :invalid_api_key, extra: lambda { |data, error|  data[:error] == "# key not found" } }
-    ]
-  end
-end
-```
 
 Protect at the bottom, and the initial value getting set to a result instance variable.  Need to call ```final```.  
 
 The ```Boundary``` looks a little crazier, especially with the metaprogramming:
 
+The ErrorHandler does something like pattern matching:
+
 ```ruby
-require 'error_handler'
-require 'logger'
-
-module Boundary
-  def protect!(on_error_config = [])
-    methods = instance_methods - Object.instance_methods
-    error_handler = ErrorHandler.new(on_error_config)
-
-    define_method("final") do |*args, &block|
-      return @final_value
+module Rescuetime                          
+  class ErrorHandler
+    def format_date(data, error)
+      Error.new(error, :invalid_date)
     end
 
-    methods.each do |method|
-      define_method("protected_#{method}") do
-        return self if @failed
-
-        begin
-          @result = __send__("original_#{method}", @result)
-          @final_value = [@result, nil]
-        rescue => e
-          @failed = true
-          error = error_handler.error_for(e, method, @result)
-          Logger.error(error.system_error_information)
-
-          @final_value = [nil, error.user_error_information]
-        end
-
-        self
+    def fetch_rows(data, error)
+      if data[:error] == "# key not found"
+        Error.new(error, :invalid_api_key)
       end
+    end
 
-      alias_method "original_#{method}", method
-      alias_method method, "protected_#{method}"
+    def default(data, error)
+      :default
     end
   end
 end
 ```
 
-The ```ErrorHandler```:
-
-```ruby
-require 'error'
-
-class ErrorHandler
-  DEFAULT_CONFIG = { i18n: :default }
-
-  def initialize(config)
-    @config = config
-  end
-
-  def error_for(e, method, result)
-    i18n = i18n_for(e, method, result)
-    Error.new(e, i18n)
-  end
-
-  private
-
-  def i18n_for(e, method, result)
-    extra_config = extra_for(e, method, result)
-
-    if extra_config
-      return extra_config[:i18n]
-    else
-      default_for(method)
-    end
-  end
-
-  def extra_for(e, method, result)
-    extras = @config.select do |c|
-      c[:method_name] == method && c[:extra]
-    end
-
-    if extras
-      extras.find do |c|
-        c[:extra].call(result, e)
-      end
-    end
-  end
-
-  def default_for(method)
-    @config.find(lambda { DEFAULT_CONFIG }) do |c|
-      c[:method_name] == method && !c[:extra]
-    end[:i18n]
-  end
-end
-```
+This is nice and explicit -- it just seems so intuitive where I'd look and where I'd change behavior in case of failure.
 
 The ```Error``` is unchanged:
 

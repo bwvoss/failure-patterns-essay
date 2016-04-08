@@ -7,10 +7,6 @@ module Rescuetime
   class Pipeline
     extend Boundary
 
-    def initialize(time)
-      @result = time
-    end
-
     def format_date(time)
       Time.parse(time).strftime('%Y-%m-%d')
     end
@@ -47,9 +43,6 @@ module Rescuetime
       end
     end
 
-    protect! [
-      { method_name: :format_date, i18n: :invalid_date},
-      { method_name: :fetch_rows, i18n: :invalid_api_key, extra: lambda { |data, error|  data[:error] == "# key not found" } }
-    ]
+    protect!
   end
 end

@@ -2,12 +2,18 @@ require 'error_handler'
 require 'logger'
 
 module Boundary
-  def protect!(on_error_config = [])
+  def protect!
     methods = instance_methods - Object.instance_methods
-    error_handler = ErrorHandler.new(on_error_config)
 
-    define_method("final") do |*args, &block|
-      return @final_value
+    define_method("initialize") do |value|
+      @result = value
+    end
+
+    #if success, return value, otherwise, delgate to handler
+    #blow up if method doesn't exist on self that we are sending to
+    #the handler
+    define_method("on_error") do |handler|
+      [@result, handler.__send__(@method, @result, @error)]
     end
 
     methods.each do |method|
@@ -16,13 +22,10 @@ module Boundary
 
         begin
           @result = __send__("original_#{method}", @result)
-          @final_value = [@result, nil]
         rescue => e
           @failed = true
-          error = error_handler.error_for(e, method, @result)
-          Logger.error(error.system_error_information)
-
-          @final_value = [nil, error.user_error_information]
+          @error = e
+          @method = method
         end
 
         self

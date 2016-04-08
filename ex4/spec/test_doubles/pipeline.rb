@@ -4,10 +4,6 @@ module TestDoubles
   class Pipeline
     extend Boundary
 
-    def initialize(start)
-      @result = start
-    end
-
     def blow_up
       raise
     end

@@ -502,7 +502,7 @@ end
 
 The only difference is I broke out a format_date method so that identifying what the real error was would be easier.  Right now I'm finding out what happend by matching a pattern to the backtrace, and that is easier to do if I encapsulate potential failures with methods of their own.
 
-As it turns out, methods of a single responsibility chained together is a common pattern in a number of programming languages.
+What's needed most now is a way to simplify our error identification and response.
 
 ### How to Handle Failure: Redux
 
@@ -526,20 +526,37 @@ console.log('Request sent!')
 
 The error handler being scoped to this one function means that it knows exactly what use cases it should handle.  There doesn't have to be any grepping or data manipulation to figure out why an error occurs -- we will write an error handler for one specific request and no others.
 
+While Ajax is one of the few times Javascript runs asynchronously, in Reactive Javascript with RxJS, asynchronous execution is not limited to service requests, but the error handling is the same:
+
+```javascript
+const subscription = source
+  .filter(quote => quote.price > 30)
+  .map(quote => quote.price)
+  .subscribe(
+    price => console.log(`Prices higher than $30: ${price}`),
+    error => console.log(`Something went wrong: ${error.message}`);
+  );
+```
+[src](https://github.com/Reactive-Extensions/RxJS)
+
+The functional collection pipeline breaks functions down into a granular level, and an error handler is set just off of the execution of those few functions.
+
 ### Lessons
 
-##### Error Handling Per Function
+##### Injectable Error Handling
 
-Segmenting and injecting an error handler that can handle on a function-level granularity is a simple and easily understandable approach to identifying the specifics about and responding to a failure.
+Error handlers can be simpler when injected based on a method, or tightly knit group of methods.  Ajax does it for a single request.
+
+The benefit of both injection and granularity means that the error handler is already scoped to a small set of potential responses.  Instead of a global handler that has to be prepared for any error the system throws, writing an error handler for a single function is significantly easier -- and understandable.
 
 ### Applying The Lessons: Redux
 
-The first thing I did was break my methods down to the size where there could only be "one" reasons to fail.  If the reasons to fail were orthogonal to one another, they went into separate methdos.  Then I pipelined them together in typical Ruby method-chaining: 
+The first thing I did was break my methods down to the size where there could only be "one" reasons to fail.  If the reasons to fail were orthogonal to one another, they went into separate methods.  Then I pipelined them together in typical Ruby method-chaining.  Like Javascript, my hope was to have method-level identification in the injected error handler: 
 
 ```ruby
 require 'boundary'
-require 'error_handler'
 require 'rescuetime/pipeline'
+require 'rescuetime/error_handler'
 
 class Consumer
   attr_reader :result, :error
@@ -552,59 +569,169 @@ class Consumer
         .request
         .fetch_rows
         .parse_rows
-        .final
+        .on_error(Rescuetime::ErrorHandler.new)
   end
 end
 ```
 
 Let's take a look at the pipeline:
 
-
-Protect at the bottom, and the initial value getting set to a result instance variable.  Need to call ```final```.  
-
-The ```Boundary``` looks a little crazier, especially with the metaprogramming:
-
-The ErrorHandler does something like pattern matching:
-
 ```ruby
-module Rescuetime                          
-  class ErrorHandler
-    def format_date(data, error)
-      Error.new(error, :invalid_date)
+require 'active_support/core_ext/time/calculations.rb'
+require 'httparty'
+require 'time'
+require 'boundary'
+
+module Rescuetime
+  class Pipeline
+    extend Boundary
+
+    def format_date(time)
+      Time.parse(time).strftime('%Y-%m-%d')
     end
 
-    def fetch_rows(data, error)
-      if data[:error] == "# key not found"
-        Error.new(error, :invalid_api_key)
+    def build_url(date)
+      "#{ENV.fetch('RESCUETIME_API_URL')}?"\
+      "key=#{ENV.fetch('RESCUETIME_API_KEY')}&"\
+      "restrict_begin=#{date}&"\
+      "restrict_end=#{date}&"\
+      'perspective=interval&'\
+      'resolution_time=minute&'\
+      'format=json'
+    end
+
+    def request(url)
+      HTTParty.get(url)
+    end
+
+    def fetch_rows(response)
+      response.fetch('rows')
+    end
+
+    def parse_rows(rows)
+      timezone = ENV.fetch('RESCUETIME_TIMEZONE')
+      rows.map do |row|
+        {
+          date:                  ActiveSupport::TimeZone[timezone].parse(row[0]).utc.to_s,
+          time_spent_in_seconds: row[1],
+          number_of_people:      row[2],
+          activity:              row[3],
+          category:              row[4],
+          productivity:          row[5]
+        }
       end
     end
 
-    def default(data, error)
-      :default
+    protect!
+  end
+end
+```
+
+Extend then protect.  It'd be nice to remove the protect! call from the bottom, but I haven't decided on an API I like yet.
+
+The ```Boundary``` looks a little crazier, especially with the metaprogramming:
+
+```ruby
+module Boundary
+  def protect!
+    methods = instance_methods - Object.instance_methods
+
+    define_method("initialize") do |value|
+      @result = value
+    end
+
+    define_method("on_error") do |handler|
+      err =
+        if @method && handler.respond_to?(@method)
+          handler.__send__(@method, @result, @error)
+        elsif @method
+          handler.__send__(:default, @result, @error)
+        end
+
+      [@result, err]
+    end
+
+    methods.each do |method|
+      define_method("protected_#{method}") do
+        return self if @failed
+
+        begin
+          @result = __send__("original_#{method}", @result)
+        rescue => e
+          @failed = true
+          @error = e
+          @method = method
+        end
+
+        self
+      end
+
+      alias_method "original_#{method}", method
+      alias_method method, "protected_#{method}"
     end
   end
 end
 ```
 
-This is nice and explicit -- it just seems so intuitive where I'd look and where I'd change behavior in case of failure.
-
-The ```Error``` is unchanged:
+The ```ErrorHandler``` is interesting -- define the name of the method you will handle the error for, and have it take the data and the error:
 
 ```ruby
+require 'error'
+
+module Rescuetime
+  class ErrorHandler
+    def format_date(data, error)
+      Error.new(error, :invalid_date).log
+    end
+
+    def fetch_rows(data, error)
+      if data[:error] == "# key not found"
+        Error.new(error, :invalid_api_key).log
+      else
+        default(data, error)
+      end
+    end
+
+    def default(data, error)
+      Error.new(error, :default).log
+    end
+  end
+end
+```
+
+This is explicit, simple, and easily changable -- it reminds me a bit of pattern matching.  No more detailed filters and matches in backtraces.  It also allowed me to delete the old, more complicated ```ErrorHandler```.
+
+There is also a default method that gets called if there is no error handler setup for the method.  I also decided to return the Error itself instead of just a symbol.  This makes things a bit less strict, but I like the flexibility.
+
+The ```Error``` is similar, though everything is private but the i18n key for the front end to use:
+
+```ruby
+require 'logger'
 require 'pretty_backtrace'
 PrettyBacktrace.enable
 PrettyBacktrace.multi_line = true
 
 class Error
-  attr_reader :error
+  attr_reader :i18n
 
   def initialize(error, i18n)
     @error = error
     @i18n = i18n
   end
 
+  def log
+    Logger.error(system_error_information)
+    self
+  end
+
+  private
+
   def system_error_information
-    { error: @error.inspect, backtrace: error.backtrace[0...5], i18n: @i18n }
+    {
+      error: @error.inspect,
+      backtrace: @error.backtrace[0...5],
+      i18n: @i18n
+    }
   end
 
   def user_error_information
@@ -612,9 +739,10 @@ class Error
   end
 end
 ```
-[ex4 and tests](http://github.com)
 
-If we start operating as a collection pipeline full of single responsibility actions, our error handling code is simplified since there is usually only one reason each one of these methods could fail.
+If something changes and we want some more information for the front end to use, we'd only have to change the error object.
+
+[ex4 and tests](http://github.com)
 
 ### Fault Tolerance At Scale
 
@@ -622,19 +750,11 @@ Now we enter the part that most people consider fault tolerance.  "Simply catchi
 
 While it is true that total fault tolerance must handle hardware failure, we wouldn't be fault tolerant without the foundation we've set, and in many ways, while scale breeds more exotic reasons to fail, fault tolerance is orthogonal to scale.  And for small applications, it is OK to defer more expensive stability measures until operating at scale.
 
-Circuit breakers, rate limiters/controlling backpressure, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.  
-
-Let's add a circuit breaker and a timeout for the HTTP request:
-
-ex4 -- show circuit breakers and timeouts; and more complicated failure responses
+Circuit breakers, rate limiters/controlling backpressure, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.
 
 This is the place where failure is a chance to add value.
 
 Defer the expensive parts: instead of large refactorings and rewrites, we are in a place to easily include and share these patterns.
-
-##### Moving to Smarter Error Response
-
-http://githubengineering.com/exception-monitoring-and-response/
 
 ### Conclusion
 

@@ -1,6 +1,3 @@
-require 'error_handler'
-require 'logger'
-
 module Boundary
   def protect!
     methods = instance_methods - Object.instance_methods
@@ -9,11 +6,15 @@ module Boundary
       @result = value
     end
 
-    #if success, return value, otherwise, delgate to handler
-    #blow up if method doesn't exist on self that we are sending to
-    #the handler
     define_method("on_error") do |handler|
-      [@result, handler.__send__(@method, @result, @error)]
+      err =
+        if @method && handler.respond_to?(@method)
+          handler.__send__(@method, @result, @error)
+        elsif @method
+          handler.__send__(:default, @result, @error)
+        end
+
+      [@result, err]
     end
 
     methods.each do |method|

@@ -1,5 +1,4 @@
 require 'boundary'
-require 'error_handler'
 require 'rescuetime/pipeline'
 require 'rescuetime/error_handler'
 

@@ -9,14 +9,14 @@ class Error
   def initialize(error, i18n)
     @error = error
     @i18n = i18n
-    log
   end
-
-  private
 
   def log
     Logger.error(system_error_information)
+    self
   end
+
+  private
 
   def system_error_information
     {

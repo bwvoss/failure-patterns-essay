@@ -1,4 +1,4 @@
-## Exploring Levels of Fault Tolerance
+## How to Design Fault Tolerant Applications
 
 ### Tell me if this seems familiar
 

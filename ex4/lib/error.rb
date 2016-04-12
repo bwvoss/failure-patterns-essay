@@ -11,13 +11,6 @@ class Error
     @i18n = i18n
   end
 
-  def log
-    Logger.error(system_error_information)
-    self
-  end
-
-  private
-
   def system_error_information
     {
       error: @error.inspect,

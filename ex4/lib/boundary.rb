@@ -1,6 +1,8 @@
+require 'logger'
+
 module Boundary
   def protect!
-    methods = instance_methods - Object.instance_methods
+    methods = instance_methods(false)
 
     define_method("initialize") do |value|
       @result = value
@@ -13,6 +15,8 @@ module Boundary
         elsif @method
           handler.__send__(:default, @result, @error)
         end
+
+      Logger.error(err) if err
 
       [@result, err]
     end

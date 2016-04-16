@@ -5,8 +5,6 @@ require 'boundary'
 
 module Rescuetime
   class Pipeline
-    extend Boundary
-
     def format_date(time)
       Time.parse(time).strftime('%Y-%m-%d')
     end
@@ -43,6 +41,6 @@ module Rescuetime
       end
     end
 
-    protect!
+    include Boundary
   end
 end

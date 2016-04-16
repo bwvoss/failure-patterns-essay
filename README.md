@@ -1,4 +1,4 @@
-## How to Design Fault Tolerant Applications
+## Building Fault Tolerant Software the Sane Way
 
 ### Tell me if this seems familiar
 
@@ -254,6 +254,36 @@ A chain of strings is an easy data structure to scan or grep, and gives a uni-di
 [src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
 Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Let's explore why Erlang is so good at dealing with failure.
+
+Let's first look at this piece of code and analyze what error handling features it shows us:
+
+```erlang
+-module(sup).
+-export([start/2, start_link/2, init/1, loop/1]).
+
+start(Mod,Args) ->
+  spawn(?MODULE, init, [{Mod, Args}]).
+
+start_link(Mod,Args) ->
+  spawn_link(?MODULE, init, [{Mod, Args}]).
+
+init({Mod,Args}) ->
+  process_flag(trap_exit, true),
+  loop({Mod,start_link,Args}).
+
+loop({M,F,A}) ->
+  Pid = apply(M,F,A),
+  receive
+    {'EXIT', _From, shutdown} ->
+      exit(shutdown); % will kill the child too
+    {'EXIT', Pid, Reason} ->
+      io:format("Process ~p exited for reason ~p~n",[Pid,Reason]),
+      loop({M,F,A})
+  end.
+```
+[src](learnyousomeerlang)
+
+What we see above is a simple example of a supervisor.
 
 ##### Process Isolation
 
@@ -746,15 +776,27 @@ If something changes and we want some more information for the front end to use,
 
 ### Fault Tolerance At Scale
 
-Now we enter the part that most people consider fault tolerance.  "Simply catching errors isn't fault tolerance!  Where is the hardware redundancy and hot backups!" they may say.  For most people, fault tolerance is coupled to scale.
+Now we enter the part that most people consider fault tolerance.  "Simply catching errors isn't fault tolerance!  Where is the hardware redundancy and hot backups!" they may say.  For most people, fault tolerance is coupled to scale, and is often hardware-centric.
+
+Rise of cloud services: fault tolerance for easy scaling and replacement or replication of hardware
+
+src: http://media.amazonwebservices.com/AWS_Building_Fault_Tolerant_Applications.pdf
+
+- safety comes from adaptive capacity: http://www.kitchensoap.com/2011/04/07/resilience-engineering-part-i/ (recovering from failure quickly is more important than having less failures overall)
+- not all failure is the same.  We can defer the handling of some forms of failure, but some we cannot tolerate from the beginning.  This also means that fault tolerance is orthogonal to scale, or distributed computing -- the failures that occur there is simply more exotic and difficult to handle.
+
+From: http://www.kitchensoap.com/2010/11/07/mttr-mtbf-for-most-types-of-f/
+> If you think you can prevent failure, then you aren’t developing your ability to respond.
+Good engineering can respond to unexpected failure.  It's up to you to determine what type of failure you will respond to.
 
 While it is true that total fault tolerance must handle hardware failure, we wouldn't be fault tolerant without the foundation we've set, and in many ways, while scale breeds more exotic reasons to fail, fault tolerance is orthogonal to scale.  And for small applications, it is OK to defer more expensive stability measures until operating at scale.
 
 Circuit breakers, rate limiters/controlling backpressure, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.
 
-This is the place where failure is a chance to add value.
-
-Defer the expensive parts: instead of large refactorings and rewrites, we are in a place to easily include and share these patterns.
+- how a system responds to failure can add value
+- defer the expensive parts: instead of large refactorings, we are in a place to easily include and share these patterns
+- the rate limiters, the circuit brakers, etc. aren't the expensive part -- they are solved problems.  How they fit into your application is the most complicated part of implemention.
+- can simplify fault tolerant designs -- instead of adding another load balancer, you can add a round-robin mechanism in the software in the right area.
 
 ### Conclusion
 

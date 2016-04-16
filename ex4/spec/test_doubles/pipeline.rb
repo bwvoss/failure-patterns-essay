@@ -2,8 +2,6 @@ require 'boundary'
 
 module TestDoubles
   class Pipeline
-    extend Boundary
-
     def blow_up
       raise
     end
@@ -28,6 +26,6 @@ module TestDoubles
       number * 3
     end
 
-    protect!
+    include Boundary
   end
 end

@@ -1,14 +1,14 @@
 require 'logger'
 
 module Boundary
-  def protect!
-    methods = instance_methods(false)
+  def self.included(klass)
+    imethods = klass.instance_methods(false)
 
-    define_method("initialize") do |value|
+    klass.send(:define_method, "initialize") do |value|
       @result = value
     end
 
-    define_method("on_error") do |handler|
+    klass.send(:define_method, "on_error") do |handler|
       err =
         if @method && handler.respond_to?(@method)
           handler.__send__(@method, @result, @error)
@@ -21,8 +21,8 @@ module Boundary
       [@result, err]
     end
 
-    methods.each do |method|
-      define_method("protected_#{method}") do
+    imethods.each do |method|
+      klass.send(:define_method, "protected_#{method}") do
         return self if @failed
 
         begin
@@ -36,8 +36,8 @@ module Boundary
         self
       end
 
-      alias_method "original_#{method}", method
-      alias_method method, "protected_#{method}"
+      klass.send(:alias_method, "original_#{method}", method)
+      klass.send(:alias_method, method, "protected_#{method}")
     end
   end
 end

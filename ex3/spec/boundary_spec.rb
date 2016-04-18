@@ -1,32 +1,61 @@
 require 'boundary'
+require 'test_doubles/pipeline'
+require 'test_doubles/error_handler'
 
 describe Boundary do
-  it 'returns the generic error' do
-    result, error = described_class.run { 5/0 }
+  let(:test_pipeline) do
+    TestDoubles::Pipeline.new(1)
+  end
+
+  let(:error_handler) { TestDoubles::ErrorHandler }
+
+  it 'returns an error' do
+    result, error = test_pipeline
+      .blow_up
+      .on_error(error_handler)
 
     expect(error).to eq(:default)
   end
 
-  it 'returns the generic error with custom config' do
-    error_config = [{ matcher: 'something', i18n: :test}]
-    result, error = described_class.run { 5/0 }
+  it 'returns an custom key' do
+    result, error = test_pipeline
+      .custom_blow_up
+      .on_error(error_handler)
+
+    expect(error).to eq(:custom)
+  end
+
+  it 'returns an custom i18n key found with extra data' do
+    result, error = TestDoubles::Pipeline.new({})
+      .custom_blow_up
+      .on_error(error_handler)
+
+    expect(error).to eq(:extra)
+  end
+
+  it 'calls default if the method is not defined on the handler' do
+    result, error = test_pipeline
+      .not_handled
+      .on_error(error_handler)
 
     expect(error).to eq(:default)
   end
 
-  it 'returns the result' do
-    result, error = described_class.run { 1 + 1 }
+  it 'returns a result' do
+    result, error = test_pipeline
+      .add_1
+      .on_error(error_handler)
 
     expect(result).to eq(2)
   end
 
-  it 'returns the specific error' do
-    error_config = [{ matcher: 'divided by 0', i18n: :bad_math }]
+  it 'method chains' do
+    result, error = test_pipeline
+      .add_1
+      .add_2
+      .times_3
+      .on_error(error_handler)
 
-    result, error = described_class.run(error_config) do
-      5/0
-    end
-
-    expect(error).to eq(:bad_math)
+    expect(result).to eq(12)
   end
 end

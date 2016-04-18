@@ -7,7 +7,7 @@ describe 'Consuming Rescuetime' do
     it 'returns i18n for date invalid errors' do
       consumer.get('not-a-date')
 
-      expect(consumer.error).to eq(:invalid_date)
+      expect(consumer.error.i18n).to eq(:invalid_date)
     end
 
     it 'returns i18n for invalid api key' do
@@ -17,10 +17,22 @@ describe 'Consuming Rescuetime' do
           messages: 'key not found'
         }
       end
+      ENV['RESCUETIME_API_URL'] = 'http://someapi.com'
+      ENV['RESCUETIME_API_KEY'] = '8sdnjf7sdnf0'
 
       consumer.get('2015-10-10')
 
-      expect(consumer.error).to eq(:invalid_api_key)
+      expect(consumer.error.i18n).to eq(:invalid_api_key)
+    end
+
+    it 'returns default if no rows' do
+      expect(HTTParty).to receive(:get) { {} }
+      ENV['RESCUETIME_API_URL'] = 'http://someapi.com'
+      ENV['RESCUETIME_API_KEY'] = '8sdnjf7sdnf0'
+
+      consumer.get('2015-10-10')
+
+      expect(consumer.error.i18n).to eq(:default)
     end
   end
 end

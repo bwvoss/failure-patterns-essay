@@ -335,6 +335,41 @@ A supervisor will usually use links and monitors with spawned child worker proce
 
 Keeping error handling in the supervisor encapsulates logic around failure, and reduces the complexity error handling adds to other parts of the application.
 
+#### Javascript
+
+##### Callbacks
+
+Javascript often makes asynchronous calls.  Programming for asynchronous systems makes error handling more difficult -- asynchronous execution makes it impossible to program error handling like a blocking language.
+
+As a simple example, let's look at a common ajax request:
+
+```javascript
+$.ajax({
+  url: 'https://my-api.com/results.json',
+  success: successHandler, // defined elsewhere
+  error: errorHandler
+});
+
+console.log('Request sent!')
+```
+
+The error handler being scoped to this one function means that it knows exactly what use cases it should handle.  There doesn't have to be any grepping or data manipulation to figure out why an error occurs -- we will write an error handler for one specific request and no others.
+
+While Ajax is probably the most well-known example of asynchronous Javascript, Reactive Javascript with RxJS has a significantly higher rate of asynchronous execution, and handles errors in a similar way with an error callback defined at the end of execution:
+
+```javascript
+const subscription = source
+  .filter(quote => quote.price > 30)
+  .map(quote => quote.price)
+  .subscribe(
+    price => console.log(`Prices higher than $30: ${price}`),
+    error => console.log(`Something went wrong: ${error.message}`);
+  );
+```
+[src](https://github.com/Reactive-Extensions/RxJS)
+
+The functional collection pipeline breaks functions down into a granular level, and an error handler is set just off of the execution of those few functions.
+
 ### Failure Strategies and Considerations
 
 > When writing code from a specification, the specification says what the code is supposed to do, it does not tell you what you’re supposed to do if the real world situation deviates from the specification
@@ -379,6 +414,12 @@ If it prevents the system from operating on the happy path, fail fast to one pla
 
 Failing in one way and having that failure handled in one place encapsulates what a failure is, and how failure to handle it.
 
+##### Injectable Error Handling
+
+Error handlers can be simpler when injected based on a method, or tightly knit group of methods.  Ajax does it for a single request.
+
+The benefit of both injection and granularity means that the error handler is already scoped to a small set of potential responses.  Instead of a global handler that has to be prepared for any error the system throws, writing an error handler for a single function is significantly easier -- and understandable.
+
 ### Applying the Lessons
 
 > Proper error handling is an essential requirement of good software.
@@ -388,205 +429,6 @@ Failing in one way and having that failure handled in one place encapsulates wha
 [src](http://blog.golang.org/error-handling-and-go)
 
 Let's rewrite our Rescuetime code with these principles:
-
-```ruby
-require 'boundary'
-require 'rescuetime/fetch'
-
-class Consumer
-  attr_reader :result, :error
-
-  def get(datetime)
-    @result, @error = Boundary.run(error_config) do
-      Rescuetime::Fetch.call(datetime)
-    end
-  end
-
-  private
-
-  def error_config
-    [
-      { matcher: '# key not found', i18n: :invalid_api_key },
-      { matcher: 'format_date', i18n: :invalid_date }
-    ]
-  end
-end
-```                                                      
-
-Think of the consumer as an HTTP client.  Like in Go, two variables are returned: the result, or an error.  If there is no error, the value is nil.  I didn't really do much with the error here, but if it is an http application, assume the view will know how to render an error variable.
-
-Here's what the Boundary looks like:
-
-```ruby
-require 'boundary/error'                          
-require 'boundary/logger'
-
-module Boundary
-  def self.run(error_configuration = [])
-    begin
-      [yield, nil]
-    rescue => e
-      error = Error.new(e, error_configuration)
-      Logger.error(error.system_error_information)
-
-      [nil, error.user_error_information]
-    end
-  end
-end
-```
-
-The ```Boundary``` is the only place error handling exists.  It is localized only to the Rescuetime fetch call.  If an error is rescued, we log system specific information for developers to see and we return information for the consumer to use. 
-
-The ```Error``` abstraction is responsible for composing errors for a specific consumer.
-
-```ruby
-require 'pretty_backtrace'                    
-PrettyBacktrace.enable
-PrettyBacktrace.multi_line = true
-
-module Boundary
-  class Error < RuntimeError
-    attr_reader :error
-  
-    def initialize(error, error_configs)
-      @error = error   
-      @error_configs = error_configs
-    end
-
-    def default_error_config
-      { i18n: :default }
-    end
-
-    def system_error_information
-      error.backtrace[0...5]
-    end
-
-    def user_error_information
-      i18n
-    end
-
-    private
-
-    def i18n
-      backtrace = error.backtrace[0...5].join(',')
-
-      @error_configs.find(lambda{ default_error_config }) do |c|
-        backtrace.include?(c[:matcher])
-      end[:i18n]
-    end
-  end
-end                                                             
-```
-
-For the system side, I used the pretty_backtrace gem which returns the backtrace with line numbers, code and variable values, and I limit it to the first 5 lines to help developers parse the information.
-
-I didn't explore it much further, but the error itself should probably be returned, and more exploration to the amount and format of the backtrace is another avenue for good ideas.
-
-The ```user_error_information``` just returns an an i18n key for internationalization.  The user experience is up to the consumer, and higher up in the application.  Returning an internationalization key explicitly tells the reader that we are returning something for the user to see, and protects information leaks.
-
-Error configurations can be injected for custom i18n keys to be returned, when the consumer has specific instructions depending on the error.
-
-This is messy, but I just try to find a pattern in the backtrace as a link to an eid.  It will be hard to maintain in the future, but works for now.
-
-There are no guards, throws or raises in the business logic, and looks like the first day when we only cared about the happy path:
-
-```ruby
-require 'active_support/core_ext/time/calculations.rb'                                                   
-require 'httparty'
-require 'time'
-
-module Rescuetime
-  class Fetch
-    def self.call(datetime)
-      formatted_date = format_date(datetime)
-    
-      response = request(formatted_date)
-    
-      response.fetch('rows').map do |row|
-        {
-          date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,   
-          time_spent_in_seconds: row[1],
-          number_of_people:      row[2],
-          activity:              row[3],
-          category:              row[4],
-          productivity:          row[5]
-        }
-      end
-    end 
-
-    def self.format_date(datetime)
-      Time.parse(datetime).strftime('%Y-%m-%d')
-    end
-                                                  
-    def self.request(datetime)              
-      url =                                 
-        "#{ENV['RESCUETIME_API_URL']}?"\    
-        "key=#{ENV['RESCUETIME_API_KEY']}&"\
-        "restrict_begin=#{datetime}&"\        
-        "restrict_end=#{datetime}&"\          
-        'perspective=interval&'\              
-        'resolution_time=minute&'\          
-        'format=json'
-
-      HTTParty.get(url)
-    end
-  end
-end                                         
-```
-[ex3 and tests](http://github.com)
-
-The only difference is I broke out a format_date method so that identifying what the real error was would be easier.  Right now I'm finding out what happend by matching a pattern to the backtrace, and that is easier to do if I encapsulate potential failures with methods of their own.
-
-What's needed most now is a way to simplify our error identification and response.
-
-### How to Handle Failure: Redux
-
-#### Javascript
-
-##### Callbacks Per Request
-
-Javascript often makes asynchronous calls.  Programming for asynchronous systems makes error handling more difficult -- asynchronous execution makes it impossible to program error handling like a blocking language.
-
-As a simple example, let's look at a common ajax request:
-
-```javascript
-$.ajax({
-  url: 'https://my-api.com/results.json',
-  success: successHandler, // defined elsewhere
-  error: errorHandler
-});
-
-console.log('Request sent!')
-```
-
-The error handler being scoped to this one function means that it knows exactly what use cases it should handle.  There doesn't have to be any grepping or data manipulation to figure out why an error occurs -- we will write an error handler for one specific request and no others.
-
-While Ajax is probably the most well-known example of asynchronous Javascript, Reactive Javascript with RxJS has a significantly higher rate of asynchronous execution, and handles errors in a similar way with an error callback defined at the end of execution:
-
-```javascript
-const subscription = source
-  .filter(quote => quote.price > 30)
-  .map(quote => quote.price)
-  .subscribe(
-    price => console.log(`Prices higher than $30: ${price}`),
-    error => console.log(`Something went wrong: ${error.message}`);
-  );
-```
-[src](https://github.com/Reactive-Extensions/RxJS)
-
-The functional collection pipeline breaks functions down into a granular level, and an error handler is set just off of the execution of those few functions.
-
-### Lessons
-
-##### Injectable Error Handling
-
-Error handlers can be simpler when injected based on a method, or tightly knit group of methods.  Ajax does it for a single request.
-
-The benefit of both injection and granularity means that the error handler is already scoped to a small set of potential responses.  Instead of a global handler that has to be prepared for any error the system throws, writing an error handler for a single function is significantly easier -- and understandable.
-
-### Applying The Lessons: Redux
-
-The first thing I did was break my methods down to the size where there could only be "one" reasons to fail.  If the reasons to fail were orthogonal to one another, they went into separate methods.  Then I pipelined them together in typical Ruby method-chaining.  Like Javascript, my hope was to have method-level identification in the injected error handler: 
 
 ```ruby
 require 'boundary'
@@ -619,8 +461,6 @@ require 'boundary'
 
 module Rescuetime
   class Pipeline
-    extend Boundary
-
     def format_date(time)
       Time.parse(time).strftime('%Y-%m-%d')
     end
@@ -657,7 +497,7 @@ module Rescuetime
       end
     end
 
-    protect!
+    include Boundary
   end
 end
 ```
@@ -667,15 +507,17 @@ Extend then protect.  It'd be nice to remove the protect! call from the bottom, 
 The ```Boundary``` looks a little crazier, especially with the metaprogramming:
 
 ```ruby
-module Boundary
-  def protect!
-    methods = instance_methods - Object.instance_methods
+require 'logger'
 
-    define_method("initialize") do |value|
+module Boundary
+  def self.included(klass)
+    imethods = klass.instance_methods(false)
+
+    klass.send(:define_method, "initialize") do |value|
       @result = value
     end
 
-    define_method("on_error") do |handler|
+    klass.send(:define_method, "on_error") do |handler|
       err =
         if @method && handler.respond_to?(@method)
           handler.__send__(@method, @result, @error)
@@ -683,11 +525,13 @@ module Boundary
           handler.__send__(:default, @result, @error)
         end
 
+      Logger.error(err) if err
+
       [@result, err]
     end
 
-    methods.each do |method|
-      define_method("protected_#{method}") do
+    imethods.each do |method|
+      klass.send(:define_method, "protected_#{method}") do
         return self if @failed
 
         begin
@@ -701,8 +545,8 @@ module Boundary
         self
       end
 
-      alias_method "original_#{method}", method
-      alias_method method, "protected_#{method}"
+      klass.send(:alias_method, "original_#{method}", method)
+      klass.send(:alias_method, method, "protected_#{method}")
     end
   end
 end
@@ -716,19 +560,19 @@ require 'error'
 module Rescuetime
   class ErrorHandler
     def format_date(data, error)
-      Error.new(error, :invalid_date).log
+      Error.new(error, :invalid_date)
     end
 
     def fetch_rows(data, error)
       if data[:error] == "# key not found"
-        Error.new(error, :invalid_api_key).log
+        Error.new(error, :invalid_api_key)
       else
         default(data, error)
       end
     end
 
     def default(data, error)
-      Error.new(error, :default).log
+      Error.new(error, :default)
     end
   end
 end
@@ -754,13 +598,6 @@ class Error
     @i18n = i18n
   end
 
-  def log
-    Logger.error(system_error_information)
-    self
-  end
-
-  private
-
   def system_error_information
     {
       error: @error.inspect,
@@ -777,7 +614,7 @@ end
 
 If something changes and we want some more information for the front end to use, we'd only have to change the error object.
 
-[ex4 and tests](http://github.com)
+[ex3 and tests](http://github.com)
 
 ### Wrapping Up
 

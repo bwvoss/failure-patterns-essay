@@ -1,4 +1,9 @@
-## Building Fault Tolerant Software the Sane Way
+## Error Handling the Sane Way With The Supervisor Pattern
+
+_The Supervisor Pattern is a programming pattern where you organize behavior into cohesive, scoped units of work and put error handling and logging in a single place for that unit.  This pattern is inspired by Erlang's approach to handling failure, but also takes inspiration from Go and Javascript.  This article describes failure strategies, and potential implementations with examples so others can more easily incorporate sane error supervision in their own applications._
+
+### Table of Contents
+
 
 ### Tell me if this seems familiar
 
@@ -330,7 +335,7 @@ A supervisor will usually use links and monitors with spawned child worker proce
 
 Keeping error handling in the supervisor encapsulates logic around failure, and reduces the complexity error handling adds to other parts of the application.
 
-### Design Considerations for Handling Failure
+### Failure Strategies and Considerations
 
 > When writing code from a specification, the specification says what the code is supposed to do, it does not tell you what you’re supposed to do if the real world situation deviates from the specification
 > 
@@ -556,7 +561,7 @@ console.log('Request sent!')
 
 The error handler being scoped to this one function means that it knows exactly what use cases it should handle.  There doesn't have to be any grepping or data manipulation to figure out why an error occurs -- we will write an error handler for one specific request and no others.
 
-While Ajax is one of the few times Javascript runs asynchronously, in Reactive Javascript with RxJS, asynchronous execution is not limited to service requests, but the error handling is the same:
+While Ajax is probably the most well-known example of asynchronous Javascript, Reactive Javascript with RxJS has a significantly higher rate of asynchronous execution, and handles errors in a similar way with an error callback defined at the end of execution:
 
 ```javascript
 const subscription = source
@@ -774,31 +779,88 @@ If something changes and we want some more information for the front end to use,
 
 [ex4 and tests](http://github.com)
 
-### Fault Tolerance At Scale
+### Wrapping Up
 
-Now we enter the part that most people consider fault tolerance.  "Simply catching errors isn't fault tolerance!  Where is the hardware redundancy and hot backups!" they may say.  For most people, fault tolerance is coupled to scale, and is often hardware-centric.
+The abstractions we made above are still evolving, though we do see that we have a single place to handle errors.  It's maintainable, explicit, and allows greater ability to adapt to the more exotic failures we will encounter as we scale.
 
-Rise of cloud services: fault tolerance for easy scaling and replacement or replication of hardware
+Depending on the convention set in your own system and the language itself, there could be many interpretations of the following principles:
 
-src: http://media.amazonwebservices.com/AWS_Building_Fault_Tolerant_Applications.pdf
+##### Encapsulate and Scope Error Handling
 
-- safety comes from adaptive capacity: http://www.kitchensoap.com/2011/04/07/resilience-engineering-part-i/ (recovering from failure quickly is more important than having less failures overall)
-- not all failure is the same.  We can defer the handling of some forms of failure, but some we cannot tolerate from the beginning.  This also means that fault tolerance is orthogonal to scale, or distributed computing -- the failures that occur there is simply more exotic and difficult to handle.
+Scope to small enough scope in your application to where an error handler can identify and respond to failure without overwhelming complexity.
 
-From: http://www.kitchensoap.com/2010/11/07/mttr-mtbf-for-most-types-of-f/
+A good abstraction in handling failure can simplify an application's architecture, and allow an organization to respond to failure better as they scale.
+
+If we'd like to introduce circuit breakers, semaphores, rate limiters or some sort of sharding abstractions, we have a boundary area in order to know where it will live.  This area can also be explored as a place to introduce failure for GameDay exercises and fault injection testing.
+
+##### Decide on what an error needs to communicate
+
+Above I returned an i18n key and sent in a custom JSON structure for the system to consume.  There is a lot more here to delve into, and most of it is custom to your organizational needs.
+
+Whatever you decide your system/developers and the consumers must see, make sure it makes sense and aids them in accomplishing their goals.
+
+##### Prefer injectable error handlers
+
+This makes the error handling abstraction more generic and extensible.  The explicit nature of seeing what error handler handles what series of behavior also limits scope and simplifies where changes need to happen.
+
+### When it breaks down
+
+- Collection Pipelines, or method chaining may not fit nicely into your application.  Some existing designs may not have a nice way to identify failure implicitly.  If you are working in a system that already has failure being handled multiple ways in numerous locations, a different convention might have to be implemented to start encapsulating that error handling without a huge facelift on system design.
+
+- What if I want a more sophisticated response instead of just logging and returning?  Some applications may want to retry on certain parts of their logical flow rather than failing outright.  Some may want to use a null object or guard in a limited scope, or even do some basic data validations inline.
+
+- complacency during failure
+
 > If you think you can prevent failure, then you aren’t developing your ability to respond.
-Good engineering can respond to unexpected failure.  It's up to you to determine what type of failure you will respond to.
 
-While it is true that total fault tolerance must handle hardware failure, we wouldn't be fault tolerant without the foundation we've set, and in many ways, while scale breeds more exotic reasons to fail, fault tolerance is orthogonal to scale.  And for small applications, it is OK to defer more expensive stability measures until operating at scale.
+[src](http://www.kitchensoap.com/2010/11/07/mttr-mtbf-for-most-types-of-f/)
+
+since most errors are caught, you as an organization may expect all errors to be handled gracefully.  Keep in mind that your system, no matter how comprehensive the error handling, will still crash and fail unexpectedly. 
+
+Don't let good error handling silence discussion and practice around your organization's ability to respond to catastrophic failure.  Continue to introduce failure through fault injection and GameDay exercises.
+
+From above:
+
+While fault tolerance is something normally only large companies are thought to be concerned with, small companies need to think about it too, to allow your company to change more easily to face the different needs that failures present.
+
+Fault tolerance is normally something only large applications need to be concerned about.  Many large applications wouldn't survive without good approaches to fault tolerance.  For many small applications, fault tolerance is an afterthought, and something peppered in along the way.  Handling failure is not seen as a business necessity.
+
+This is correct.  Small applications will not see the same exotic and business crippiling failures that large applications do at scale.  But for a small application there could only be a handful of users, and the worst we could see are stack traces.  Defer fault tolerance and defer handling errors.
+
+But here is what small applications overlook and the hypothesis I will prove in this essay: thinking about fault tolerance early and making it a core philosophy in the system design, handling more levels of fault tolerance as you scale becomes much simpler and cheaper.  Not only that, but it brings transparency to your team's organizational response to failure, and allows the business to better plan to increase your ability to deal with different types of failure at different stages of your company's growth.
+
+The sophistication of how your application responds in the face of failure is unique to your company's needs.  A large company will have a much different set of requirements than a company that serves 10 users.  Setting up multi-region redundancy would probably kill a small company from costs.  A company like Groupon would probably be killed if it didn't have a mature fault tolerant infrastructure setup.
+
+The beauty of what we have above is that it allows us to defer the most expensive parts, and reduces complexity and cost of including them when the time comes to introduce them.
+
+##### Defer the complexities of some failure states without ignoring them
+
+At the most fundamental level, this design allows us to control how the application behaves in the face of all circumstances but the failure of the server this code runs on itself.
+
+We could become much more sophisticated in alerting the user to which services are still available, or what happens after some failure states.  But fundamentally, all errors are controlled in a uniform way.
+
+Even in a small application, the way we respond to certain failures can become complex and expensive.  But because we already handle the error in a fundamentally sound way, we can defer it, and when we want to address it, we already have a cleanly abstracted place to make the change.
+
+Your system must still respond in the face of failure to be considered fault tolerant.  How it responds is where the art comes in.  What is certain is that how your system responds is as much subject to change as any business requirement and must therefore be architected with the same care in terms of making it easy to change.
+
+##### defer more mature stability patterns
 
 Circuit breakers, rate limiters/controlling backpressure, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.
 
-- how a system responds to failure can add value
-- defer the expensive parts: instead of large refactorings, we are in a place to easily include and share these patterns
-- the rate limiters, the circuit brakers, etc. aren't the expensive part -- they are solved problems.  How they fit into your application is the most complicated part of implemention.
-- can simplify fault tolerant designs -- instead of adding another load balancer, you can add a round-robin mechanism in the software in the right area.
+##### Future software changes for failure response are cheaper
 
-### Conclusion
+instead of large refactorings, we are in a place to easily include and share these patterns
+
+##### Promotes a more mature way to think about failure for a business
+
+
+Good engineering can respond to unexpected failure.  It's up to you to determine what type of failure you will respond to.
+
+Safety comes from adaptive capacity: http://www.kitchensoap.com/2011/04/07/resilience-engineering-part-i/ (recovering from failure quickly is more important than having less failures overall)  Your company considers, and has abstractions in the software for how to deal with responses more maturely, and promotes a more software-centric approach to stability.
+
+##### Defer hardware redundacy
+
+We are not truly fault tolerant until we address hardware failure.  For a small company, not having redundancy at the hardware level may be an appropriate cost.  The scale may not require it.
 
 By making a few smart design decisions early on in a project, we can handle failure in an elegant, controlled manner.  Failure at scale becomes more manageable, and these principles can apply to any language.
 

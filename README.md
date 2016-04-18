@@ -1,9 +1,28 @@
 ## Error Handling the Sane Way With The Supervisor Pattern
 
-_The Supervisor Pattern is a programming pattern where you organize behavior into cohesive, scoped units of work and put error handling and logging in a single place for that unit.  This pattern is inspired by Erlang's approach to handling failure, but also takes inspiration from Go and Javascript.  This article describes failure strategies, and potential implementations with examples so others can more easily incorporate sane error supervision in their own applications._
+_The Supervisor Pattern is a programming pattern where you organize behavior into cohesive, scoped units of work and put error handling and logging in a single place for that unit.  This pattern is inspired by Erlang's approach to handling failure, but also takes inspiration from Go and Javascript.  This article describes failure strategies, and potential implementations with examples so others can more easily incorporate sane failure supervision in their own applications._
 
 ### Table of Contents
 
+The Usual Progression of Handling Error
+
+Error Handling in:
+
+Go
+
+Erlang
+
+Javascript
+
+Failure Principles
+
+An attempt to implement
+
+Wrapping up
+
+Pitfalls in the Current Approach
+
+Sources
 
 ### Tell me if this seems familiar
 
@@ -622,7 +641,7 @@ The abstractions we made above are still evolving, though we do see that we have
 
 Depending on the convention set in your own system and the language itself, there could be many interpretations of the following principles:
 
-##### Encapsulate and Scope Error Handling
+##### Mitigate the Complexity Failure Introduces by Encapsulating and Scoping Error Handling
 
 Scope to small enough scope in your application to where an error handler can identify and respond to failure without overwhelming complexity.
 
@@ -656,7 +675,7 @@ since most errors are caught, you as an organization may expect all errors to be
 
 Don't let good error handling silence discussion and practice around your organization's ability to respond to catastrophic failure.  Continue to introduce failure through fault injection and GameDay exercises.
 
-From above:
+In Conclusion
 
 While fault tolerance is something normally only large companies are thought to be concerned with, small companies need to think about it too, to allow your company to change more easily to face the different needs that failures present.
 
@@ -690,16 +709,10 @@ instead of large refactorings, we are in a place to easily include and share the
 
 ##### Promotes a more mature way to think about failure for a business
 
-
 Good engineering can respond to unexpected failure.  It's up to you to determine what type of failure you will respond to.
 
 Safety comes from adaptive capacity: http://www.kitchensoap.com/2011/04/07/resilience-engineering-part-i/ (recovering from failure quickly is more important than having less failures overall)  Your company considers, and has abstractions in the software for how to deal with responses more maturely, and promotes a more software-centric approach to stability.
 
-##### Defer hardware redundacy
-
-We are not truly fault tolerant until we address hardware failure.  For a small company, not having redundancy at the hardware level may be an appropriate cost.  The scale may not require it.
-
-By making a few smart design decisions early on in a project, we can handle failure in an elegant, controlled manner.  Failure at scale becomes more manageable, and these principles can apply to any language.
 
 #### Sources
 

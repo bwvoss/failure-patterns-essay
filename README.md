@@ -1,6 +1,6 @@
-## Error Handling the Sane Way With The Supervisor Pattern
+## Application Patterns and Principles for Handling Failure
 
-_The Supervisor Pattern is a programming pattern where you organize behavior into cohesive, scoped units of work and put error handling and logging in a single place for that unit.  This pattern is inspired by Erlang's approach to handling failure, but also takes inspiration from Go and Javascript.  This article describes failure strategies, and potential implementations with examples so others can more easily incorporate sane failure supervision in their own applications._
+_Treating error handling as its own responsibility makes applications cleaner, and easier to change in case of failure.  In this blog, we look at the pitfalls of how error handling is traditionally approached, and by taking inspiration from languages like Go, Erlang, and JavaScript, we pattern a different encapsulation to handling failure that encourages simplicity._
 
 ### Table of Contents
 
@@ -12,15 +12,13 @@ Go
 
 Erlang
 
-Javascript
+Asynchronous Javascript
 
 Failure Principles
 
-An attempt to implement
+The Principles Implemented
 
-Wrapping up
-
-Pitfalls in the Current Approach
+A Focus on Reducing Complexity
 
 Sources
 
@@ -223,7 +221,7 @@ There is nearly the same amount of error handling code as we do happy path code,
 
 The error handling we did put in place, though, allows graceful degredation of certain features to give the user something to do.  The negative to this, though, is that by capturing errors and not re-raising them, we lose the transparency and metrics exception notification provides.
 
-### How To Handle Failure
+### Strategies in Error Handling
 
 Unless we stop and consider some basic error handling abstractions, more modules will be added to the system and are doomed to repeat the above process.  The larger the system gets, the more we will be unable to safely and clearly apply many levels of fault tolerance.  What we need is to learn about how to handle failure a more mature way. 
 
@@ -279,7 +277,9 @@ A chain of strings is an easy data structure to scan or grep, and gives a uni-di
 
 Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Let's explore why Erlang is so good at dealing with failure.
 
-Let's first look at this piece of code and analyze what error handling features it shows us:
+Erlang/OTP applications are usually represented as a tree structure, where one process, known as a supervisor, will oversee the worker processes.
+
+The supervisor is responsible for observing and orchestrating the workers, which should do the bulk of the business processing.  When a process encounters an issue, Erlang's philosophy is to let it crash, or fail fast, and have a separate handler deal with the failure. Let's walk down this simple supervisor:
 
 ```erlang
 -module(sup).
@@ -307,15 +307,60 @@ loop({M,F,A}) ->
 ```
 [src](learnyousomeerlang)
 
-What we see above is a simple example of a supervisor.
-
 ##### Process Isolation
 
-A large part of Erlang's ability to keep operating despite failure is process isolation.  A process in Erlang is responsible for doing a discrete unit of work in total isolation -- no memory sharing, no locks and no dependent communication with other processes.
+A process in Erlang is a lightweight, isolated process in the Erlang VM. It is not a Kernel process.  A process in Erlang is responsible for doing a discrete unit of work in total isolation -- no memory sharing, no locks and no dependent communication with other processes.  One is invoked using the ```spawn``` built-in function in the start function:
 
-Erlang/OTP applications are usually represented as a tree structure, where one process, known as a supervisor, will oversee the worker processes.
+```erlang
+start(Mod,Args) ->
+  spawn(?MODULE, init, [{Mod, Args}]).
+```
 
-The supervisor is responsible for observing and orchestrating the workers, which should do the bulk of the business processing.  When a process encounters an issue, Erlang's philosophy is to let it crash, or fail fast. Erlang/OTP systems _expect_ error to occur and build handling into the supervisor.
+```?MODULE``` is an Erlang macro that will evaluate to the name of the module at compile-time.  The second argument is the name of the function that will be invoked on the module, and the third argument is a list of arguments the function will receive.  In this case, ```sup```'s ```init``` function will be called with a tuple that has the values by-way of pattern matching with the arguments received.
+
+The next method down looks similar:
+
+```erlang
+start_link(Mod,Args) ->
+  spawn_link(?MODULE, init, [{Mod, Args}]).
+```
+
+The ```spawn_link``` built-in function also creates a new Erlang process that runs separate and asynchronously from our own process.  Besides creating a process, ```spawn_link``` atomically links our own process with the newly created one.  We will learn what a link is next, but this protects us from trying to link to a dead process.
+
+##### Links and Exit Trapping
+
+A link is a bidirectional bond between two processes.  If we are linked to a process and that process dies, we will also die.  This is a valuable tool when you have a supervisor looking after thousands of workers -- now if the supervisor dies, all linked processes will also be cleaned up.  But this could get us in trouble if a worker dies.  We want the supervisor to survive, and handle the problem.
+
+The first line of the init function invokes a built-in function called ```process_flag```:
+
+```erlang
+init({Mod,Args}) ->
+  process_flag(trap_exit, true),
+  loop({Mod,start_link,Args}).
+```
+When ```process_flag``` is passed the arguments of ```trap_exit, true``` then the exit signals received from dead linked processes will not kill us outright, but instead be transformed into: ```{'EXIT', Pid, Reason}```, which we can handle and respond to, as we do in the ```loop``` function:
+
+```erlang
+loop({M,F,A}) ->
+  Pid = apply(M,F,A),
+  receive
+    {'EXIT', _From, shutdown} ->
+      exit(shutdown); % will kill the child too
+    {'EXIT', Pid, Reason} ->
+      io:format("Process ~p exited for reason ~p~n",[Pid,Reason]),
+      loop({M,F,A})
+  end.
+```
+
+```loop``` is a function that takes one argument -- a tuple with a module, a function, and an argument list.  ```apply``` is a built-in function that will take those three values and invoke the function on that module with the arguments.
+
+```apply``` returns a value that gets bound to a variable (variables start with capital letters in Erlang) called ```Pid```, which in Erlang is convention for "process identifier".  This tells us that whatever we are applying will spawn a new process.
+
+The line below is ```receive``` which specifies what to do when our process receives messages of a specific pattern.  Regardless if the receiving process is there, the sending process receives a return message immediately.  The message is scheduled for delivery by the Erlang VM, and if the process is dead it will discard the message, but the sending process will not fail.  This level of isolation between processes means that failures in some won't compromise the health of the ones still working. 
+
+The first pattern the message could match: ```{'EXIT', _From, shutdown}``` will cause us to exit, killing us and any of our linked processes.  
+
+The second pattern: ```{'EXIT', Pid, Reason}``` is what we receive when a linked process terminates.  When that happens we print some text and re-spawn the process by recursively calling ```loop```.
 
 > Engineers are not conditioned to embrace their ability to respond to emergencies; they aim to avoid them altogether
 > 
@@ -323,58 +368,41 @@ The supervisor is responsible for observing and orchestrating the workers, which
 
 [src](http://queue.acm.org/detail.cfm?id=2353017)
 
-Coming from a defensive programming mindset, this may seem outright dangerous.  But Erlang believes failing processes quickly helps avoid data corruption and transient bugs that commonly cause system crashes at scale, and forces confronting error earlier rather than later and reducing the fear of system failures.
+Erlang believes failing processes quickly helps avoid data corruption and transient bugs that commonly cause system crashes at scale, and forces confronting error earlier rather than later and reducing the fear of system failures.
 
-##### Links and Monitors
+Keeping error handling in the supervisor encapsulates logic around failure, and reduces the complexity error handling adds to other parts of the application.  And process isolation with message passing allows processes to continue working despite transient failure.
 
-A Link is a bidirectional bond between two processes.  When a process crashes, the linked processes will terminate, or trap the exit if it wants to live.  The message received is an exit, the process identifier, or PID, of the terminated process, and a reason for failure:
+#### Asynchronous Javascript
 
-```erlang
-{'EXIT', FromPid, Reason}
-```
+I will demonstrate how two JavaScript libraries deal with error handling during asynchronous execution: jQuery, and RxJS, a reactive programming library.
 
-Erlang provides Monitors for unidirectional observation in case of failure.  A process can be monitored like this:
+##### Scoped Callbacks
 
-```erlang
-erlang:monitor(process, MonitoredPid)
-```
-
-```process``` is an atom, or a constant whose only value is their own name.  The ```MonitoredPid``` is a variable that has been bound to the process identifier that we'd like to monitor.
-
-When the monitored process terminates, the monitor will receive this data structure:
-
-```erlang
-{'DOWN', Ref, process, MonitoredPid, Reason}
-```
-[src](http://erlang.org/doc/reference_manual/processes.html)
-
-Among other things, the monitor will receive a down signal with a reason and the pid that went down.
-
-A supervisor will usually use links and monitors with spawned child worker processes, and depending on the message and reason, will know what to do in case of failure, such as restarting the process.
-
-Keeping error handling in the supervisor encapsulates logic around failure, and reduces the complexity error handling adds to other parts of the application.
-
-#### Javascript
-
-##### Callbacks
-
-Javascript often makes asynchronous calls.  Programming for asynchronous systems makes error handling more difficult -- asynchronous execution makes it impossible to program error handling like a blocking language.
-
-As a simple example, let's look at a common ajax request:
+Error handling during asynchronous execution is difficult because the program's execution may not be linear.  Take this example of an Ajax request in jQuery:
 
 ```javascript
 $.ajax({
   url: 'https://my-api.com/results.json',
-  success: successHandler, // defined elsewhere
+  success: successHandler,
   error: errorHandler
 });
 
-console.log('Request sent!')
+console.log("Finished?");
 ```
 
-The error handler being scoped to this one function means that it knows exactly what use cases it should handle.  There doesn't have to be any grepping or data manipulation to figure out why an error occurs -- we will write an error handler for one specific request and no others.
+The Ajax request is not gaurenteed to finish before the ```console.log``` is invoked.  The loss of linear execution means that we cannot write code like this:
 
-While Ajax is probably the most well-known example of asynchronous Javascript, Reactive Javascript with RxJS has a significantly higher rate of asynchronous execution, and handles errors in a similar way with an error callback defined at the end of execution:
+```javascript
+try {
+  var response = $.ajax({ url: 'https://my-api.com/results.json' });
+} catch (err) {
+  errorHandler(err);
+};
+
+successHandler(response);
+```
+
+We cannot know when that asynchronous behavior will fully execute and come back to us.  What Ajax provides is a wrapper around that asynchronous execution, and the ability to pass in a handler to respond in case of failure.  Reactive programming -- the use of asynchronous streams -- handles error in a similar way.  Look at this example from the documentation of the RxJS library:
 
 ```javascript
 const subscription = source
@@ -387,9 +415,11 @@ const subscription = source
 ```
 [src](https://github.com/Reactive-Extensions/RxJS)
 
-The functional collection pipeline breaks functions down into a granular level, and an error handler is set just off of the execution of those few functions.
+We have a pipeline of operations, and an error callback injected to handle failure states.  The explicitness of the pipeline allows us to inject a scoped and simpler error handler -- there are only a few functions that it has to handle.
 
-### Failure Strategies and Considerations
+The generic and explicit approach of passing in the error handler makes the flow of execution easier to reason about, and encourages error handling abstractions at a finer level of granularity.  Besides the design of the handlers themselves, the abstraction around utilizing them is attractive.
+
+### Failure Patterns and Principles
 
 > When writing code from a specification, the specification says what the code is supposed to do, it does not tell you what you’re supposed to do if the real world situation deviates from the specification
 > 
@@ -397,47 +427,43 @@ The functional collection pipeline breaks functions down into a granular level, 
 
 [src](http://www.se-radio.net/2008/03/episode-89-joe-armstrong-on-erlang/)
 
-##### Errors for the System, and Errors for the User
+##### Inject Error Handlers as a Dependency
 
-Two segments will see error: the system and engineers, and the public.  Make sure whatever is seen is appropriate.
+Error handlers are dependencies to be passed in.  Keeping the handler as a dependency better separates the main flow of execution with the use cases of failure.
 
-For the public, they should not see stack traces.  They should be given a good error message and information on what they can do in the meantime.
+It also promotes a more generic and wide-reaching abstraction that can be explicitly understood, or changed.  The handlers are passed into either a function, or a group of functionally pipelined functions, implying that handlers need only be scoped to a single function.
 
-For the system and engineers, make sure data is structured in a way that makes diagnosis and problem analysis easy.  Go gives a causal string for high-level understanding and Erlang gives a list of tuples as a strack trace for programatic analysis.
+##### Scope Error Handlers to Specific Functionality
 
-For either party, the goal is a simple user experience.
+Scoping error handlers to a method, or class, keeps our error handlers discrete and simple.  Error increases the amount and complexity of the code, and there is a good chance that the larger the scope the error handler has to watch over, the handler will become more complex and difficult to maintain.  If our error handler has a global scope, it will either be too complicated to use, or too simple to provide much value.
 
-##### Error Handling Changes System Convention
+##### Demonstrate Error Uniformly
 
-> You can try to prevent bugs all you want, but most of the time, some will still creep in.  And even if by some miracle your code doesn't have any bugs, nothing can stop the eventual hardware failure.  Therefore, the idea is to find good ways to handle errors and problems, rather than trying to prevent them all.
+> Well-designed computational systems, like well-designed automobiles or nuclear reactors, are designed in a modular manner, so that the parts can be constructed, replaced, and debugged separately.
 > 
-> Fred Hebert
+> Harold Abelson and Gerald Jay Sussman from "Structure and Interpretation of Computer Programs"
 
-[src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
+Most systems have multiple ways to fail.  Some fail silently, some return default data or null objects, some throw an error to be handled and some raise an exception that stops the flow of execution all together.  In systems like this, our pre and post conditions are varied and inconclusive.  Keeping a mental model of system convention logically organized becomes much more difficult to accomplish.
 
-Error handling is foundational in both Go's and Erlang's designs and philosophies.  Ignoring failure is close to impossible.
+We must make sure all of our components have uniform pre and post conditions even if failure happens.  Erlang chooses to fail fast, and Go treats an error as an explicit, uniform mechanism for indicating failure.  When we fail fast in one way, then the pre-conditions of our component become simpler, and our error handlers become more understandable and generic to produce consistent post-conditions.
 
-Handling failure is the central driver to the architecture of Erlang/OTP applications.  Errors will *ALWAYS* happen, and the sooner they are faced the more stable the system will become.
+##### Keep the Happy Path Oblivious To Error Handling
 
-If error handling is peppered in after the system has matured, expect expensive refactorings to become fault tolerant, and in the meantime, enjoy the complexity and uncertaintly of incomplete, unorganized error handling.
+About a year ago Michael Feathers introduced me to a concept he called "The Chocolate Shell and the Creamy Center".  It describes the idea that error handling is a separate reponsibility from the happy path code.  I love the metaphor -- who hasn't eaten some candy with a chocolate shell and a creamy center?  Error handling is something that leaks and dirties the pristine happy path that we rely on -- unless we encapsulate it first.
 
-##### Localized, Uniform Error Handling Simplifies Flow Control
+Keeping the happy path and failure paths as decoupled as possible gives our code a greater level of readability and maintainability, even as our application needs to handle more use cases.
 
-In an application that is defensively programmed, there is a plethora of ways to signal failure.  Maybe a guard statement is used, or an exception is raised or an error is thrown and caught.  The varience and multiple levels of error handling logic complicates systems.
+##### Errors are Mechanisms for Communication
 
-Erlang supervisors are the really the single place where errors are caught and special logic is applied.  The workers fail fast and are clear of error handling logic, or flow control in case of failure.
+Just as we will organize our code in a way to promote communication, the errors we see after something goes wrong must also be designed to be read.
 
-Go simplifies this by having an error be a recognized type that flow control would be applied to, meaning there is only one way errors will be handled for flow control.  For most purposes, an error is an error.
+There are two segments of user that should see an error: the system and engineers, and the public.  The public should never see a stack trace.  Not only can leaking stack traces be a security concern, but also a despondent user experience.  Users should have a nice error message and information on what they can do in the meantime.
 
-If it prevents the system from operating on the happy path, fail fast to one place in one way and depend on the error handler to know what to do.
+The system and engineers need data structured in a way that makes diagnosis and problem analysis easy.  As an engineer debugging a problem, knowing what data was in play and around what parts of the code would be nice to have along with the error.  Give the engineer a context to make remediation easier.  
 
-Failing in one way and having that failure handled in one place encapsulates what a failure is, and how failure to handle it.
+Submit the data in a way that also makes programatic analysis of the problem easy.  Not only does this allow the engineers to develop tools to more easily analyze problems, but it works well with alerting and auditing software.
 
-##### Injectable Error Handling
-
-Error handlers can be simpler when injected based on a method, or tightly knit group of methods.  Ajax does it for a single request.
-
-The benefit of both injection and granularity means that the error handler is already scoped to a small set of potential responses.  Instead of a global handler that has to be prepared for any error the system throws, writing an error handler for a single function is significantly easier -- and understandable.
+Rememeber that when things go wrong, people see it.  Give them a great user experience.
 
 ### Applying the Lessons
 
@@ -635,90 +661,21 @@ If something changes and we want some more information for the front end to use,
 
 [ex3 and tests](http://github.com)
 
-### Wrapping Up
+### Focus on Reducing Complexity
 
-The abstractions we made above are still evolving, though we do see that we have a single place to handle errors.  It's maintainable, explicit, and allows greater ability to adapt to the more exotic failures we will encounter as we scale.
+The abstractions we made above are still evolving, though we do have the beginning of something useful.  It's maintainable, explicit, and allows greater ability to adapt to the more exotic failures we will encounter as we scale -- if we need circuit breakers, semaphores or logging, we have a place to add it.  Informative errors to make the user experience better for the consumer are returned.  Significantly less code needs to be written and maintained around handling failure.  A linear and scoped convention is set for handling error to make it easy for developers to read and understand what happens in the flow of control during failure.
 
-Depending on the convention set in your own system and the language itself, there could be many interpretations of the following principles:
-
-##### Mitigate the Complexity Failure Introduces by Encapsulating and Scoping Error Handling
-
-Scope to small enough scope in your application to where an error handler can identify and respond to failure without overwhelming complexity.
-
-A good abstraction in handling failure can simplify an application's architecture, and allow an organization to respond to failure better as they scale.
-
-If we'd like to introduce circuit breakers, semaphores, rate limiters or some sort of sharding abstractions, we have a boundary area in order to know where it will live.  This area can also be explored as a place to introduce failure for GameDay exercises and fault injection testing.
-
-##### Decide on what an error needs to communicate
-
-Above I returned an i18n key and sent in a custom JSON structure for the system to consume.  There is a lot more here to delve into, and most of it is custom to your organizational needs.
-
-Whatever you decide your system/developers and the consumers must see, make sure it makes sense and aids them in accomplishing their goals.
-
-##### Prefer injectable error handlers
-
-This makes the error handling abstraction more generic and extensible.  The explicit nature of seeing what error handler handles what series of behavior also limits scope and simplifies where changes need to happen.
-
-### When it breaks down
-
-- Collection Pipelines, or method chaining may not fit nicely into your application.  Some existing designs may not have a nice way to identify failure implicitly.  If you are working in a system that already has failure being handled multiple ways in numerous locations, a different convention might have to be implemented to start encapsulating that error handling without a huge facelift on system design.
-
-- What if I want a more sophisticated response instead of just logging and returning?  Some applications may want to retry on certain parts of their logical flow rather than failing outright.  Some may want to use a null object or guard in a limited scope, or even do some basic data validations inline.
-
-- complacency during failure
-
-> If you think you can prevent failure, then you aren’t developing your ability to respond.
-
-[src](http://www.kitchensoap.com/2010/11/07/mttr-mtbf-for-most-types-of-f/)
-
-since most errors are caught, you as an organization may expect all errors to be handled gracefully.  Keep in mind that your system, no matter how comprehensive the error handling, will still crash and fail unexpectedly. 
-
-Don't let good error handling silence discussion and practice around your organization's ability to respond to catastrophic failure.  Continue to introduce failure through fault injection and GameDay exercises.
-
-In Conclusion
-
-While fault tolerance is something normally only large companies are thought to be concerned with, small companies need to think about it too, to allow your company to change more easily to face the different needs that failures present.
-
-Fault tolerance is normally something only large applications need to be concerned about.  Many large applications wouldn't survive without good approaches to fault tolerance.  For many small applications, fault tolerance is an afterthought, and something peppered in along the way.  Handling failure is not seen as a business necessity.
-
-This is correct.  Small applications will not see the same exotic and business crippiling failures that large applications do at scale.  But for a small application there could only be a handful of users, and the worst we could see are stack traces.  Defer fault tolerance and defer handling errors.
-
-But here is what small applications overlook and the hypothesis I will prove in this essay: thinking about fault tolerance early and making it a core philosophy in the system design, handling more levels of fault tolerance as you scale becomes much simpler and cheaper.  Not only that, but it brings transparency to your team's organizational response to failure, and allows the business to better plan to increase your ability to deal with different types of failure at different stages of your company's growth.
-
-The sophistication of how your application responds in the face of failure is unique to your company's needs.  A large company will have a much different set of requirements than a company that serves 10 users.  Setting up multi-region redundancy would probably kill a small company from costs.  A company like Groupon would probably be killed if it didn't have a mature fault tolerant infrastructure setup.
-
-The beauty of what we have above is that it allows us to defer the most expensive parts, and reduces complexity and cost of including them when the time comes to introduce them.
-
-##### Defer the complexities of some failure states without ignoring them
-
-At the most fundamental level, this design allows us to control how the application behaves in the face of all circumstances but the failure of the server this code runs on itself.
-
-We could become much more sophisticated in alerting the user to which services are still available, or what happens after some failure states.  But fundamentally, all errors are controlled in a uniform way.
-
-Even in a small application, the way we respond to certain failures can become complex and expensive.  But because we already handle the error in a fundamentally sound way, we can defer it, and when we want to address it, we already have a cleanly abstracted place to make the change.
-
-Your system must still respond in the face of failure to be considered fault tolerant.  How it responds is where the art comes in.  What is certain is that how your system responds is as much subject to change as any business requirement and must therefore be architected with the same care in terms of making it easy to change.
-
-##### defer more mature stability patterns
-
-Circuit breakers, rate limiters/controlling backpressure, timeouts and semaphores are a few software abstractions to aid stability and fault tolerance.  Because we've already set clear abstractions for error handlinng, we know exactly where most of this stuff will go.
-
-##### Future software changes for failure response are cheaper
-
-instead of large refactorings, we are in a place to easily include and share these patterns
-
-##### Promotes a more mature way to think about failure for a business
-
-Good engineering can respond to unexpected failure.  It's up to you to determine what type of failure you will respond to.
-
-Safety comes from adaptive capacity: http://www.kitchensoap.com/2011/04/07/resilience-engineering-part-i/ (recovering from failure quickly is more important than having less failures overall)  Your company considers, and has abstractions in the software for how to deal with responses more maturely, and promotes a more software-centric approach to stability.
-
+Depending on the needs and demands you operate in, the code above may not appeal.  The principles still should, though.  Work on separating and scoping error handling in a uniform, explicit manner.  As you grow, it will only become more complicated.  Ignoring failure is impossible, and the most resilient systems have failure response as a cornerstone to system convention and philosophy.
 
 #### Sources
 
 http://devblog.avdi.org/2014/05/21/jim-weirich-on-exceptions/
 
 https://blog.golang.org/errors-are-values
+
+http://erlang.org/doc/reference_manual/processes.html
+
+Learn you some Erlang: http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG
 
 
 

@@ -9,6 +9,18 @@ describe Boundary do
 
   let(:error_handler) { TestDoubles::ErrorHandler }
 
+  xit 'accepts a pre condition' do
+  end
+
+  xit 'returns a Boundary::PreConditionError if pre-condition fails' do
+  end
+
+  xit 'builds a log' do
+  end
+
+  xit 'error handler implements default by itself, returns BoundaryHandler::DefaultError with callstack' do
+  end
+
   it 'returns an error' do
     result, error = test_pipeline
       .blow_up

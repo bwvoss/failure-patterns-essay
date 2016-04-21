@@ -1,5 +1,5 @@
 require 'boundary'
-require 'rescuetime/pipeline'
+require 'rescuetime/fetch'
 require 'rescuetime/error_handler'
 
 class Consumer
@@ -7,7 +7,7 @@ class Consumer
 
   def get(datetime)
     @result, @error =
-      Rescuetime::Pipeline.new(datetime)
+      Rescuetime::Fetch.new(datetime)
         .format_date
         .build_url
         .request

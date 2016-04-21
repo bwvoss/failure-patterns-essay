@@ -1,28 +1,30 @@
 ## Application Patterns and Principles for Handling Failure
 
-_Treating error handling as its own responsibility makes applications cleaner, and easier to change in case of failure.  In this blog, we look at the pitfalls of how error handling is traditionally approached, and by taking inspiration from languages like Go, Erlang, and JavaScript, we pattern a different encapsulation to handling failure that encourages simplicity._
+_In this essay, we look at the dangers of deferring a complete approach to handling error, and by taking inspiration from languages like Go, Erlang, and JavaScript, we pattern a different encapsulation to handling failure that encourages simpler, more stable designs._
 
-### Table of Contents
+## Table of Contents
 
-The Usual Progression of Handling Error
+[The Danger of Defering Error Handling](#beginning)
 
 Error Handling in:
 
-Go
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Go](#go)
 
-Erlang
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Erlang](#erlang)
 
-Asynchronous Javascript
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Asynchronous Javascript](#js)
 
-Failure Principles
+[Failure Patterns and Principles](#fpp)
 
-The Principles Implemented
+[Implementing the Patterns and Principles](#imp)
 
-A Focus on Reducing Complexity
+[Wrapping Up: Focus on Reducing Complexity](#wrap)
 
-Sources
+[Sources](#sources)
 
-### Tell me if this seems familiar
+-
+
+### <a name="beginning"></a>Tell me if this seems familiar
 
 Let's assume a program that fetches and parses data from Rescuetime's API:
 
@@ -62,13 +64,13 @@ class RescuetimeData
 end
 
 ```
-[ex1 and tests](http://github.com)
+[ex1 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex1)
 
 This is nice enough. The business logic is clear. The tests clearly describe the behavior.
 
-Since our system and userbase is small, we don't pay much attention to error handling.  We're more focused on delivering business value for the happy path.  We setup an exception notifier like Airbrake or Honeybadger and release the software.
+Our system is small.  Fixing errors manually is easy, and the application doesn't fail much due to the lower volume of traffic.  In case of failure, though an exception notifier is installed and the software is released.
 
-Not too soon after release, our exception reporting is kicking in.  First, we forgot to set the right environment variables for the Rescuetime URL on our latest deploy, so we add guard statements:
+Slowly, our inbox fills with error reports, and the team diligently sets out to fix the issues.  On the first ticket, the right environment variables weren't set for the Rescuetime URL.  To protect against this error, a guard statement is added:
 
 ```ruby
 def self.request(datetime)
@@ -77,7 +79,7 @@ def self.request(datetime)
     # ...continue
 ```
 
-Since request can now return nil, we add a guard to the parsing:
+Since request can now return nil, a guard is added to the parsing:
 
 ```ruby
 def self.fetch(datetime)
@@ -90,7 +92,7 @@ def self.fetch(datetime)
 		# ...continue
 ```
 
-The consumer (here it is some sort of HTTP client) has to also be able to respond to nil:
+The consumer (here it is some sort of HTTP client) also has to respond to nil:
 
 ```ruby
 def get
@@ -104,11 +106,11 @@ def get
 end
 ```
 
-Also, datetime is coming from the outside world, and we've seen lots of error reports with the ```params[:datetime]``` field full of bad data, and we want to make sure it is something parsable into a formatted date:
+The next ticket has to do with the ```params[:datetime]``` field full of bad data, and it must be a parsable :
 
 ```ruby
 begin
-	formatted_date = DateTime.parse(datetime).strftime('%Y-%m-%d')
+	formatted_date = Time.parse(datetime).strftime('%Y-%m-%d')
 rescue => e
 	return { error: "not a real date" }
 end
@@ -117,9 +119,7 @@ return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
 # ...continue
 ```
 
-Since this is something from the user, we want them to have information in order to make a decision on what to do.  We don't change the API url information though since that is set in the configuration of the environment -- we don't want the user to set the api url.
-
-This now becomes:
+Since this is something from the user, it's decided to return some context to the user so they may change their input:
 
 ```ruby
 def self.fetch(datetime)
@@ -133,7 +133,7 @@ def self.fetch(datetime)
 		# ...continue
 ```
 
-And whatever is consuming our module:
+The consumer must handle a new design as well:
 
 ```ruby
 # In the consumer
@@ -149,7 +149,8 @@ def get
 end
 ```
 
-At this point, let's look at the entire project:
+From handling just two errors, our codebase went from 40 to 57 total lines of code, and our flog score, a general measure of complexity increased from 33 to 47, a roughly 42% increase in complexity and amount of code.  For only two errors.  This is the whole thing:
+
 
 ```ruby
 require 'fetch_rescuetime_data'
@@ -213,17 +214,17 @@ class RescuetimeData
   end
 end
 ```
-[ex2 and tests](http://github.com)
+[ex2 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex2)
 
 What we've done is a very natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.
 
-There is nearly the same amount of error handling code as we do happy path code, and we are only handling a fraction of all possible errors.  Our module's post-conditions are complex:  sometimes we return nil, an object that has a message for the user or the real value. Sometimes we use begin/rescue for flow control.  Sometimes we use conditionals -- and this is only the first round of fixes based on failure.
+Unless a more sophisticated abstraction is made around handling failure, the complexity and lines of code will continue to grow at an uncontrolled rate.  If most of the error cases were fixed above, the happy path would be the most miniscule percentage of the codebase.
 
-The error handling we did put in place, though, allows graceful degredation of certain features to give the user something to do.  The negative to this, though, is that by capturing errors and not re-raising them, we lose the transparency and metrics exception notification provides.
+Even though the error reports have been fixed, the pre and post-conditions for the methods have become more complex, and the errors that are mitigated are not being recorded anymore, reducing the metrics and ultimately the team's understand of how the application is behaving.
 
-### Strategies in Error Handling
+Something has to be done quickly. The longer error handling is defered, the more it will leak uncontrolled into the happy paths of the business.
 
-Unless we stop and consider some basic error handling abstractions, more modules will be added to the system and are doomed to repeat the above process.  The larger the system gets, the more we will be unable to safely and clearly apply many levels of fault tolerance.  What we need is to learn about how to handle failure a more mature way. 
+### <a name="go"></a> Strategies in Error Handling
 
 > While few people would claim the software they produce and the hardware it runs on never fails, it is not uncommon to design a software architecture under the presumption that everything will work.
 > 
@@ -241,9 +242,9 @@ Unless we stop and consider some basic error handling abstractions, more modules
 
 ##### Explicit Errors
 
-In Go, ```error``` is built-in, ordinary value.  The creators of Go saw that exceptions add complexity.  Throws, rescues, catches and raises pollute the control flow.  For Go, errors are a natural part of a healthy program running in production and should be consciously handled.
+In Go, ```error``` is built-in, ordinary value.  The creators of Go saw that exceptions add complexity.  Throws, rescues, catches and raises complicate the control flow.  For Go, errors are a natural part of a healthy program running in production and should be consciously handled.
 
-Instead of blocks that scope code execution for protection -- like a begin/rescue in Ruby -- Go uses normal control flow mechanisms like if and return to process errors:
+Instead of blocks that scope code execution for protection -- like a ```rescue``` block in Ruby -- Go uses normal control flow mechanisms like ```if``` and ```return``` to process errors:
 
 ```go
 f, err := os.Open("filename.ext")
@@ -253,9 +254,7 @@ if err != nil {
 ```
 [src](http://blog.golang.org/error-handling-and-go)
 
-Explicitly returning errors demands the error receives attention.  Coupled with Go's static typing, errors need to be explicitly ignored.  As an added benefit, the user will less likely be randomly subjected to stack traces. 
-
-While Go forces the developer to face errors a natural running system could produce, there is still a ```panic```, which is conventionally, used when when the system is totally broken and in an unrecoverable format.
+Explicitly returning errors demands the error receives attention.  Coupled with Go's static typing, errors need to be explicitly ignored.  This explicit control benefits the end user, too, by making it less likely a random stacktrace takes control of their screen.
 
 ##### Communicating With Error messages
 
@@ -267,7 +266,7 @@ rescuetime: fetch: http timeout: the url of http://rescuetime-api.com timed out 
 
 A chain of strings is an easy data structure to scan or grep, and gives a uni-directional view leading to the failure.  While we may want to add some more information like variable values or line numbers, the bigger message from the structure of the message is that errors are meant to teach a human what went wrong.
 
-#### Erlang
+#### <a name="erlang"></a> Erlang
 
 > The best example of Erlang's robustness is the often-reported nine nines (99.9999999 percent) of availability offered on the Ericsson AXD 301 ATM switches, which consist of more than a million lines of Erlang code.
 > 
@@ -372,7 +371,7 @@ Erlang believes failing processes quickly helps avoid data corruption and transi
 
 Keeping error handling in the supervisor encapsulates logic around failure, and reduces the complexity error handling adds to other parts of the application.  And process isolation with message passing allows processes to continue working despite transient failure.
 
-#### Asynchronous Javascript
+#### <a name="js"></a> Asynchronous Javascript
 
 I will demonstrate how two JavaScript libraries deal with error handling during asynchronous execution: jQuery, and RxJS, a reactive programming library.
 
@@ -419,7 +418,7 @@ We have a pipeline of operations, and an error callback injected to handle failu
 
 The generic and explicit approach of passing in the error handler makes the flow of execution easier to reason about, and encourages error handling abstractions at a finer level of granularity.  Besides the design of the handlers themselves, the abstraction around utilizing them is attractive.
 
-### Failure Patterns and Principles
+### <a name="fpp"></a> Failure Patterns and Principles
 
 > When writing code from a specification, the specification says what the code is supposed to do, it does not tell you what you’re supposed to do if the real world situation deviates from the specification
 > 
@@ -465,7 +464,7 @@ Submit the data in a way that also makes programatic analysis of the problem eas
 
 Rememeber that when things go wrong, people see it.  Give them a great user experience.
 
-### Applying the Lessons
+### <a name="imp"></a> Applying the Lessons
 
 > Proper error handling is an essential requirement of good software.
 > 
@@ -665,19 +664,21 @@ end
 
 The error we return from the handler has two methods: one for the system and one for the user.  The ```user_error_information``` returns an ```i18n``` key.  This means the consumer will have to map that into the appropriate text on the front-end.  This is a nice separation of responsibilities and keeps the back-end from having to change for presentation text changes.
 
-The ```system_error_information``` returns a hash with the ```i18n``` key, the error, and a filtered backtrace.  I also enabled ```PrettyBacktrace```, a gem that takes the backtrace and adds contextual information like variable values and actual code snippets.  
+The ```system_error_information``` returns a hash with the ```i18n``` key, the error, and a filtered backtrace.  I also enabled ```PrettyBacktrace```, a gem that takes the backtrace and adds contextual information like variable values and actual code snippets.
+
+If we didn't want to use a gem for contextual information, it would be easy to create a Log object with data about every method when invoked. 
 
 As a hashes and strings I can process this data programatically, and as an engineer, I have the context I need to better understand what happened.  It's a great start.
 
-[ex3 and tests](http://github.com)
+[ex3 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex3)
 
-### Focus on Reducing Complexity
+### <a name="wrap"></a> Focus on Reducing Complexity
 
 The abstractions we made above are still evolving, though we do have the beginning of something useful.  It's maintainable, explicit, and allows greater ability to adapt to the more exotic failures we will encounter as we scale -- if we need circuit breakers, semaphores or logging, we have a place to add it.  Informative errors to make the user experience better for the consumer are returned.  Significantly less code needs to be written and maintained around handling failure.  A linear and scoped convention is set for handling error to make it easy for developers to read and understand what happens in the flow of control during failure.
 
 Depending on the needs and demands you operate in, the code above may not appeal.  The principles still should, though.  Work on separating and scoping error handling in a uniform, explicit manner.  As you grow, it will only become more complicated.  Ignoring failure is impossible, and the most resilient systems have failure response as a cornerstone to system convention and philosophy.
 
-#### Sources
+### <a name="sources"></a> Sources
 
 http://devblog.avdi.org/2014/05/21/jim-weirich-on-exceptions/
 

@@ -4,7 +4,7 @@ require 'time'
 require 'boundary'
 
 module Rescuetime
-  class Pipeline
+  class Fetch
     def format_date(time)
       Time.parse(time).strftime('%Y-%m-%d')
     end

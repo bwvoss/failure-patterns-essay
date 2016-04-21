@@ -433,7 +433,7 @@ Error handlers are dependencies to be passed in.  Keeping the handler as a depen
 
 It also promotes a more generic and wide-reaching abstraction that can be explicitly understood, or changed.  The handlers are passed into either a function, or a group of functionally pipelined functions, implying that handlers need only be scoped to a single function.
 
-##### Scope Error Handlers to Specific Functionality
+##### Scope Error Handlers to Specific Abstractions
 
 Scoping error handlers to a method, or class, keeps our error handlers discrete and simple.  Error increases the amount and complexity of the code, and there is a good chance that the larger the scope the error handler has to watch over, the handler will become more complex and difficult to maintain.  If our error handler has a global scope, it will either be too complicated to use, or too simple to provide much value.
 
@@ -495,6 +495,11 @@ class Consumer
   end
 end
 ```
+We clearly see the influence from reactive pipeling with a nice, explicit method chain.  From the consumer standpoint, the happy path is obvious and fluid.  
+
+The error handler is injected using an ```on_error``` method, so we can look at the ```Rescuetime::ErrorHandler``` if we want to see what happens in a state of failure, which we will see soon.
+
+Lastly, in the spirit of Go, we have the result, and an error getting returned.  If there is an error, ```@error``` will contain a value and ```@result``` will be ```nil```.  Otherwise, ```@result``` will have a value and ```@error``` will be ```nil```.
 
 Let's take a look at the pipeline:
 
@@ -547,9 +552,9 @@ module Rescuetime
 end
 ```
 
-Extend then protect.  It'd be nice to remove the protect! call from the bottom, but I haven't decided on an API I like yet.
+The methods have a fantastic uniformity -- they all take one argument, and return one argument.  They have no error handling or data validation.  This is as pure a happy path as can be hoped for, and the methods are wonderfully easy to read.  
 
-The ```Boundary``` looks a little crazier, especially with the metaprogramming:
+There is also no ```initialization``` and if you look back at the consumer, the methods seen publically have no airity, yet these all have an airity of 1.  Both of these, as well as the implementation wart of putting the ```include``` at the bottom of the class, is revealed in the ```Boundary```'s metaprogramming:
 
 ```ruby
 require 'logger'
@@ -597,7 +602,9 @@ module Boundary
 end
 ```
 
-The ```ErrorHandler``` is interesting -- define the name of the method you will handle the error for, and have it take the data and the error:
+Metaprogramming is a dangerous art, but here we are leveraging it well.  After ```including``` the module, Ruby calls the ```included``` callback where I get all of the instance methods defined on the class and define aliases around them to rescue and fail fast.
+
+If a failure happens, I eventually will call that method name on the handler:
 
 ```ruby
 require 'error'
@@ -623,14 +630,13 @@ module Rescuetime
 end
 ```
 
-This is explicit, simple, and easily changable -- it reminds me a bit of pattern matching.  No more detailed filters and matches in backtraces.  It also allowed me to delete the old, more complicated ```ErrorHandler```.
+This is explicit, simple, and easily changable -- it reminds me a bit of pattern matching.  Define the method you want to handle on, and it receives the data the method executed with, and the raised error.  If it is called, that means the error occured in that method.  The handler can figure out what really went wrong with methods that are a bit more ambiguous, like ```fetch_rows```.
 
-There is also a default method that gets called if there is no error handler setup for the method.  I also decided to return the Error itself instead of just a symbol.  This makes things a bit less strict, but I like the flexibility.
+There is also a default method that gets called if there is no error handler setup for the method.
 
-The ```Error``` is similar, though everything is private but the i18n key for the front end to use:
+Let's look at the ```Error``` object:
 
 ```ruby
-require 'logger'
 require 'pretty_backtrace'
 PrettyBacktrace.enable
 PrettyBacktrace.multi_line = true
@@ -657,7 +663,11 @@ class Error
 end
 ```
 
-If something changes and we want some more information for the front end to use, we'd only have to change the error object.
+The error we return from the handler has two methods: one for the system and one for the user.  The ```user_error_information``` returns an ```i18n``` key.  This means the consumer will have to map that into the appropriate text on the front-end.  This is a nice separation of responsibilities and keeps the back-end from having to change for presentation text changes.
+
+The ```system_error_information``` returns a hash with the ```i18n``` key, the error, and a filtered backtrace.  I also enabled ```PrettyBacktrace```, a gem that takes the backtrace and adds contextual information like variable values and actual code snippets.  
+
+As a hashes and strings I can process this data programatically, and as an engineer, I have the context I need to better understand what happened.  It's a great start.
 
 [ex3 and tests](http://github.com)
 

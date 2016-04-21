@@ -1,4 +1,3 @@
-require 'logger'
 require 'pretty_backtrace'
 PrettyBacktrace.enable
 PrettyBacktrace.multi_line = true

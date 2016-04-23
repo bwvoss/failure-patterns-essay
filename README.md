@@ -66,11 +66,9 @@ end
 ```
 [ex1 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex1)
 
-This is nice enough. The business logic is clear. The tests clearly describe the behavior.
+This is nice -- the business logic is clear.  Lower volumes of traffic produce only a few errors, which are deferred to release the happy path.  To allow the team to respond more quickly in case of failure, an exception notifier is installed.
 
-Our system is small.  Fixing errors manually is easy, and the application doesn't fail much due to the lower volume of traffic.  In case of failure, though an exception notifier is installed and the software is released.
-
-Slowly, our inbox fills with error reports, and the team diligently sets out to fix the issues.  On the first ticket, the right environment variables weren't set for the Rescuetime URL.  To protect against this error, a guard statement is added:
+Slowly, the team's inboxes fill with error reports, and they diligently set out to fix the issues.  On the first ticket, the right environment variables weren't set for the Rescuetime URL.  To protect against this error, a guard statement is added:
 
 ```ruby
 def self.request(datetime)
@@ -150,7 +148,6 @@ end
 ```
 
 From handling just two errors, our codebase went from 40 to 57 total lines of code, and our flog score, a general measure of complexity increased from 33 to 47, a roughly 42% increase in complexity and amount of code.  For only two errors.  This is the whole thing:
-
 
 ```ruby
 require 'fetch_rescuetime_data'

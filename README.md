@@ -1,10 +1,10 @@
 ## Application Patterns and Principles for Handling Failure
 
-_In this essay, we look at the dangers of deferring a complete approach to handling error, and by taking inspiration from languages like Go, Erlang, and JavaScript, we pattern a different encapsulation to handling failure that encourages simpler, more stable designs._
+_Applications without proper error handling abstractions are bound to quickly grow in complexity and instability.  Teams working in these systems mirror this growth in fear and confusion.  By learning about error handling paradigms from a handful of languages -- such as Go and Erlang -- language-agnostic patterns and principles are shown that help keep software simpler and safer in the face of a complex universe that loves to crash systems._
 
 ## Table of Contents
 
-[The Danger of Defering Error Handling](#beginning)
+[The Danger of Deferring Error Handling](#beginning)
 
 Error Handling in:
 
@@ -216,15 +216,15 @@ end
 ```
 [ex2 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex2)
 
-What we've done is a very natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.
+This is a natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.
 
-Unless a more sophisticated abstraction is made around handling failure, the complexity and lines of code will continue to grow at an uncontrolled rate.  If most of the error cases were fixed above, the happy path would be the most miniscule percentage of the codebase.
+Unless a more sophisticated abstraction is made around handling failure, the complexity and lines of code will continue to grow at an uncontrolled rate.  If most of the error cases were fixed above, the happy path would be the smallest percentage of the codebase.
 
-Even though the error reports have been fixed, the pre and post-conditions for the methods have become more complex, and the errors that are mitigated are not being recorded anymore, reducing the metrics and ultimately the team's understand of how the application is behaving.
+Even though the error reports have been fixed, the pre and post-conditions for the methods have become more complex, and the mitigated errors are not recorded anymore, reducing the metrics and the team's understanding of how the application behaves.
 
-Something has to be done quickly. The longer error handling is defered, the more it will leak uncontrolled into the happy paths of the business.
+Something has to be done quickly. The longer error handling is deferred, the more it will leak into the happy paths of the business.
 
-### <a name="go"></a> Strategies in Error Handling
+### <a name="go"></a> Language-Level Approaches to Error Handling
 
 > While few people would claim the software they produce and the hardware it runs on never fails, it is not uncommon to design a software architecture under the presumption that everything will work.
 > 
@@ -234,17 +234,15 @@ Something has to be done quickly. The longer error handling is defered, the more
 
 #### Go
 
-> Any function that does I/O, for example, must confront the possiblity of error, and only a naive programmer believes a simple read or write cannot fail.  Indeed, it's when the most reliable operations fail unexpectedly that we most need to know why.
+> Any function that does I/O, for example, must confront the possibility of error, and only a naive programmer believes a simple read or write cannot fail.  Indeed, it's when the most reliable operations fail unexpectedly that we most need to know why.
 
-> Alan A. A. Donovan and Brian W. Kernighan
+> Alan A. A. Donovan and Brian W. Kernighan from "The Go Programming Language"
 
 [src](http://www.amazon.com/Programming-Language-Addison-Wesley-Professional-Computing-ebook/dp/B0184N7WWS)
 
-##### Explicit Errors
+##### Conventional Flow Control
 
-In Go, ```error``` is built-in, ordinary value.  The creators of Go saw that exceptions add complexity.  Throws, rescues, catches and raises complicate the control flow.  For Go, errors are a natural part of a healthy program running in production and should be consciously handled.
-
-Instead of blocks that scope code execution for protection -- like a ```rescue``` block in Ruby -- Go uses normal control flow mechanisms like ```if``` and ```return``` to process errors:
+In Go, ```error``` is built-in, ordinary value.  The creators of Go saw the utilities commonly used to control error -- like throw, rescue, catch, or raise -- makes code less maintainable.  Instead, Go uses normal control flow mechanisms like ```if``` and ```return``` to handle errors:
 
 ```go
 f, err := os.Open("filename.ext")
@@ -254,17 +252,19 @@ if err != nil {
 ```
 [src](http://blog.golang.org/error-handling-and-go)
 
-Explicitly returning errors demands the error receives attention.  Coupled with Go's static typing, errors need to be explicitly ignored.  This explicit control benefits the end user, too, by making it less likely a random stacktrace takes control of their screen.
+Coupled with Go's static typing, errors have to be faced in even the simplest Go programs.  Having errors caught automatically at the language level keeps consistency in system convention and aids in writing clean, resilient software.
 
 ##### Communicating With Error messages
 
-The Go community established a convention for error messages that make it easy for operators to track down what went wrong in a casual chain with strings.  Let's say we wanted to craft an error message for an HTTP timeout failure for the Rescuetime code.  In Go, it may be structured like this:
+The Go community's convention for error messages make it easy to identify problems with a casual chain with strings.  Let's say we wanted to craft an error message for an HTTP timeout failure for the Rescuetime code.  In Go, it may be structured like this:
 
 ```go
 rescuetime: fetch: http timeout: the url of http://rescuetime-api.com timed out at 5 seconds
 ```
 
-A chain of strings is an easy data structure to scan or grep, and gives a uni-directional view leading to the failure.  While we may want to add some more information like variable values or line numbers, the bigger message from the structure of the message is that errors are meant to teach a human what went wrong.
+Traversing strings is a comfortable exercise and gives a uni-directional view leading to the failure.  While more information like variable values or line numbers can be added, the lesson is that errors are meant for human consumption, and they should be structured in a way to encourage usability.
+
+Errors as data reduce complexity in flow control and an explicit member of any program.  Convention around structuring error messages teach that errors are mechanisms for communication and understandability.
 
 #### <a name="erlang"></a> Erlang
 
@@ -274,11 +274,11 @@ A chain of strings is an easy data structure to scan or grep, and gives a uni-di
 
 [src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
-Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Let's explore why Erlang is so good at dealing with failure.
+Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Erlang/OTP applications are usually represented as a supervision tree, where one process, known as a supervisor and responsible for observing and orchestrating the workers, will oversee worker processes holding the bulk of the business logic.
 
-Erlang/OTP applications are usually represented as a tree structure, where one process, known as a supervisor, will oversee the worker processes.
+Errors are not usually handled in worker processes.  Instead, when a worker experiences a failure, Erlang wants us to let it crash, or fail fast.  The supervisor will know what to do in response to a failed worker.
 
-The supervisor is responsible for observing and orchestrating the workers, which should do the bulk of the business processing.  When a process encounters an issue, Erlang's philosophy is to let it crash, or fail fast, and have a separate handler deal with the failure. Let's walk down this simple supervisor:
+Isolated units that fail fast help avoid data corruption and transient bugs that commonly cause system crashes at scale, and helps reduce an organizations fear of possible future failures.  Let's walk through a simple supervisor:
 
 ```erlang
 -module(sup).
@@ -304,11 +304,9 @@ loop({M,F,A}) ->
       loop({M,F,A})
   end.
 ```
-[src](learnyousomeerlang)
+[src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
-##### Process Isolation
-
-A process in Erlang is a lightweight, isolated process in the Erlang VM. It is not a Kernel process.  A process in Erlang is responsible for doing a discrete unit of work in total isolation -- no memory sharing, no locks and no dependent communication with other processes.  One is invoked using the ```spawn``` built-in function in the start function:
+A process is a lightweight, isolated process in the Erlang VM. It is not an OS process.  Erlang processes are shared-nothing: no memory sharing, no locking and communication can only happen through asynchronous message passing.  They are designed this way so that when one fails, the other processes will be safe to continue.  A process is created using the ```spawn``` built-in function:
 
 ```erlang
 start(Mod,Args) ->
@@ -324,20 +322,21 @@ start_link(Mod,Args) ->
   spawn_link(?MODULE, init, [{Mod, Args}]).
 ```
 
-The ```spawn_link``` built-in function also creates a new Erlang process that runs separate and asynchronously from our own process.  Besides creating a process, ```spawn_link``` atomically links our own process with the newly created one.  We will learn what a link is next, but this protects us from trying to link to a dead process.
+The ```spawn_link``` built-in function also creates a new process, but also atomically links our own process with the newly created one, ensuring we always link to a live process.
 
 ##### Links and Exit Trapping
 
-A link is a bidirectional bond between two processes.  If we are linked to a process and that process dies, we will also die.  This is a valuable tool when you have a supervisor looking after thousands of workers -- now if the supervisor dies, all linked processes will also be cleaned up.  But this could get us in trouble if a worker dies.  We want the supervisor to survive, and handle the problem.
+A link is a bidirectional bond between two processes.  If a process dies, it sends an exit signal that will kill any linked processes.  A supervisor looking after thousands of workers will want its workers to be cleaned up if it dies.  If a worker dies, a supervisor will most likely not want to die with it.  For this, Erlang allows us to trap and handle the exit signal sent from a linked process:
 
-The first line of the init function invokes a built-in function called ```process_flag```:
+The first line of the ```init``` function invokes a built-in function called ```process_flag```:
 
 ```erlang
 init({Mod,Args}) ->
   process_flag(trap_exit, true),
   loop({Mod,start_link,Args}).
 ```
-When ```process_flag``` is passed the arguments of ```trap_exit, true``` then the exit signals received from dead linked processes will not kill us outright, but instead be transformed into: ```{'EXIT', Pid, Reason}```, which we can handle and respond to, as we do in the ```loop``` function:
+
+When ```process_flag``` is passed the arguments of ```trap_exit, true``` then the exit signals received from dead linked processes will be transformed into: ```{'EXIT', Pid, Reason}```, which can be handled, as the ```loop``` function demonstrates:
 
 ```erlang
 loop({M,F,A}) ->
@@ -353,13 +352,17 @@ loop({M,F,A}) ->
 
 ```loop``` is a function that takes one argument -- a tuple with a module, a function, and an argument list.  ```apply``` is a built-in function that will take those three values and invoke the function on that module with the arguments.
 
-```apply``` returns a value that gets bound to a variable (variables start with capital letters in Erlang) called ```Pid```, which in Erlang is convention for "process identifier".  This tells us that whatever we are applying will spawn a new process.
+```apply``` returns a value that gets bound to a variable (variables start with capital letters in Erlang) called ```Pid```, which in Erlang is convention for "process identifier".  This means the ```apply``` call will spawn a new process.
 
-The line below is ```receive``` which specifies what to do when our process receives messages of a specific pattern.  Regardless if the receiving process is there, the sending process receives a return message immediately.  The message is scheduled for delivery by the Erlang VM, and if the process is dead it will discard the message, but the sending process will not fail.  This level of isolation between processes means that failures in some won't compromise the health of the ones still working. 
+```receive``` specifies what to do when the process receives messages of a specific pattern.  When a message is sent they get scheduled for delivery by the Erlang VM, and if the receiving process is dead, Erlang will discard the message, but the sending process will not fail. 
 
-The first pattern the message could match: ```{'EXIT', _From, shutdown}``` will cause us to exit, killing us and any of our linked processes.  
+If the message has the ```shutdown``` atom: ```{'EXIT', _From, shutdown}``` then the process will exit, killing itself and any linked processes.  
 
-The second pattern: ```{'EXIT', Pid, Reason}``` is what we receive when a linked process terminates.  When that happens we print some text and re-spawn the process by recursively calling ```loop```.
+The second pattern the message could match: ```{'EXIT', Pid, Reason}``` is the default exit message that will get trapped and handled.  When that happens some text is printed and the process is re-spawn.
+
+Erlang's clean contracts between shared-nothing components makes whole categories of errors irrelevant.  Failing fast reduces the chance errors harm data or cause cascading failures, and eliminates handling code for a cleaner project.  Keeping error handling logic in supervisors allows workers to purely express business logic.
+
+#### <a name="js"></a> Asynchronous Javascript
 
 > Engineers are not conditioned to embrace their ability to respond to emergencies; they aim to avoid them altogether
 > 
@@ -367,17 +370,11 @@ The second pattern: ```{'EXIT', Pid, Reason}``` is what we receive when a linked
 
 [src](http://queue.acm.org/detail.cfm?id=2353017)
 
-Erlang believes failing processes quickly helps avoid data corruption and transient bugs that commonly cause system crashes at scale, and forces confronting error earlier rather than later and reducing the fear of system failures.
-
-Keeping error handling in the supervisor encapsulates logic around failure, and reduces the complexity error handling adds to other parts of the application.  And process isolation with message passing allows processes to continue working despite transient failure.
-
-#### <a name="js"></a> Asynchronous Javascript
-
-I will demonstrate how two JavaScript libraries deal with error handling during asynchronous execution: jQuery, and RxJS, a reactive programming library.
+Asynchronous execution forces an approach to error handling that doesn't depend on a linear flow of execution.  There are two JavaScript libraries that deal with asynchronous execution: jQuery, and RxJS, a reactive programming library.
 
 ##### Scoped Callbacks
 
-Error handling during asynchronous execution is difficult because the program's execution may not be linear.  Take this example of an Ajax request in jQuery:
+This is an example of an Ajax request in jQuery:
 
 ```javascript
 $.ajax({
@@ -389,7 +386,7 @@ $.ajax({
 console.log("Finished?");
 ```
 
-The Ajax request is not gaurenteed to finish before the ```console.log``` is invoked.  The loss of linear execution means that we cannot write code like this:
+The Ajax request is not guaranteed to finish before ```console.log``` is invoked.  Non-linear execution means error handling code cannot be written as:
 
 ```javascript
 try {
@@ -401,7 +398,7 @@ try {
 successHandler(response);
 ```
 
-We cannot know when that asynchronous behavior will fully execute and come back to us.  What Ajax provides is a wrapper around that asynchronous execution, and the ability to pass in a handler to respond in case of failure.  Reactive programming -- the use of asynchronous streams -- handles error in a similar way.  Look at this example from the documentation of the RxJS library:
+The time it takes to complete asynchronous behavior is variable.  Callbacks, functions that are passed in and executed sometime in the future, are used to react when a specific piece of asynchronous behavior finishes.  Reactive programming with [RxJS](https://github.com/Reactive-Extensions/RxJS) -- the use of asynchronous streams -- handles error with callbacks as well:
 
 ```javascript
 const subscription = source
@@ -414,9 +411,9 @@ const subscription = source
 ```
 [src](https://github.com/Reactive-Extensions/RxJS)
 
-We have a pipeline of operations, and an error callback injected to handle failure states.  The explicitness of the pipeline allows us to inject a scoped and simpler error handler -- there are only a few functions that it has to handle.
+Reactive programming leverages collection pipelines.  Collection pipelines are a pattern commonly seen in functional programming, and chain together small functions into a linear flow.
 
-The generic and explicit approach of passing in the error handler makes the flow of execution easier to reason about, and encourages error handling abstractions at a finer level of granularity.  Besides the design of the handlers themselves, the abstraction around utilizing them is attractive.
+Passing in error handlers as callbacks encourages more generic abstractions, and allows handlers to be scoped to a smaller unit of work.  Functional collection pipelines are easy to reason about and limit failure on a per-function basis.
 
 ### <a name="fpp"></a> Failure Patterns and Principles
 
@@ -432,9 +429,11 @@ Error handlers are dependencies to be passed in.  Keeping the handler as a depen
 
 It also promotes a more generic and wide-reaching abstraction that can be explicitly understood, or changed.  The handlers are passed into either a function, or a group of functionally pipelined functions, implying that handlers need only be scoped to a single function.
 
-##### Scope Error Handlers to Specific Abstractions
+##### Scope Error Handlers
 
-Scoping error handlers to a method, or class, keeps our error handlers discrete and simple.  Error increases the amount and complexity of the code, and there is a good chance that the larger the scope the error handler has to watch over, the handler will become more complex and difficult to maintain.  If our error handler has a global scope, it will either be too complicated to use, or too simple to provide much value.
+Scoping error handlers to a method, or class, keeps error handlers discrete and simple.  Handlers are simpler when the scope of error to handle is limited.  Error handlers at a global scope will either be too complicated to use, or too simple to provide value.
+
+Application design influences the complexity of handling errors.  Erlang shows shared-nothing processes reduce the segment of errors around locking and shared memory from occurring, and small functional pipelines popular in Reactive programming provide a smaller scope to evaluate when errors occur.
 
 ##### Demonstrate Error Uniformly
 
@@ -442,29 +441,23 @@ Scoping error handlers to a method, or class, keeps our error handlers discrete 
 > 
 > Harold Abelson and Gerald Jay Sussman from "Structure and Interpretation of Computer Programs"
 
-Most systems have multiple ways to fail.  Some fail silently, some return default data or null objects, some throw an error to be handled and some raise an exception that stops the flow of execution all together.  In systems like this, our pre and post conditions are varied and inconclusive.  Keeping a mental model of system convention logically organized becomes much more difficult to accomplish.
-
-We must make sure all of our components have uniform pre and post conditions even if failure happens.  Erlang chooses to fail fast, and Go treats an error as an explicit, uniform mechanism for indicating failure.  When we fail fast in one way, then the pre-conditions of our component become simpler, and our error handlers become more understandable and generic to produce consistent post-conditions.
+Some systems fail silently, some return default data or null objects, some throw an error to be handled and some raise an exception that stops the flow of execution all together.  Variance in error handling convention adds complexity.  A system is simpler and better prepared for fault tolerance when components fail uniformly, and fast.  Uniform post-conditions and failing fast provides simplicity, security and more generic error handlers.
 
 ##### Keep the Happy Path Oblivious To Error Handling
 
-About a year ago Michael Feathers introduced me to a concept he called "The Chocolate Shell and the Creamy Center".  It describes the idea that error handling is a separate reponsibility from the happy path code.  I love the metaphor -- who hasn't eaten some candy with a chocolate shell and a creamy center?  Error handling is something that leaks and dirties the pristine happy path that we rely on -- unless we encapsulate it first.
+Michael Feathers introduced me to a concept he called "The Chocolate Shell and the Creamy Center".  It's a wonderful metaphor to describe the idea that error handling should live in a separate place from the happy path.
 
-Keeping the happy path and failure paths as decoupled as possible gives our code a greater level of readability and maintainability, even as our application needs to handle more use cases.
+Keeping the happy path and failure paths decoupled improves readability and maintainability for both states the application may find itself.
 
 ##### Errors are Mechanisms for Communication
 
-Just as we will organize our code in a way to promote communication, the errors we see after something goes wrong must also be designed to be read.
+Just like code, write errors to be read by someone else.  There are two consumers of errors: the engineers, and the public.  The public should never see a stack trace.  Leaking stack traces are a security concern and provide a lackluster user experience.
 
-There are two segments of user that should see an error: the system and engineers, and the public.  The public should never see a stack trace.  Not only can leaking stack traces be a security concern, but also a despondent user experience.  Users should have a nice error message and information on what they can do in the meantime.
+Engineers need data structured in a way that makes diagnosis and problem analysis easy.  A more complete context results in faster remediation and happier engineers.  Automated tools and systems commonly analyze data for alerting or investigative purposes.  Ensure the data is easy to programatically transform and load.
 
-The system and engineers need data structured in a way that makes diagnosis and problem analysis easy.  As an engineer debugging a problem, knowing what data was in play and around what parts of the code would be nice to have along with the error.  Give the engineer a context to make remediation easier.  
+Remember that when things go wrong, people see it.  Errors don't hide.
 
-Submit the data in a way that also makes programatic analysis of the problem easy.  Not only does this allow the engineers to develop tools to more easily analyze problems, but it works well with alerting and auditing software.
-
-Rememeber that when things go wrong, people see it.  Give them a great user experience.
-
-### <a name="imp"></a> Applying the Lessons
+### <a name="imp"></a> Implementing Error Handling the Right Way
 
 > Proper error handling is an essential requirement of good software.
 > 
@@ -472,11 +465,11 @@ Rememeber that when things go wrong, people see it.  Give them a great user expe
 
 [src](http://blog.golang.org/error-handling-and-go)
 
-Let's rewrite our Rescuetime code with these principles:
+Let's rewrite the Rescuetime code with these principles:
 
 ```ruby
 require 'boundary'
-require 'rescuetime/pipeline'
+require 'rescuetime/fetch'
 require 'rescuetime/error_handler'
 
 class Consumer
@@ -484,7 +477,7 @@ class Consumer
 
   def get(datetime)
     @result, @error =
-      Rescuetime::Pipeline.new(datetime)
+      Rescuetime::Fetch.new(datetime)
         .format_date
         .build_url
         .request
@@ -494,13 +487,9 @@ class Consumer
   end
 end
 ```
-We clearly see the influence from reactive pipeling with a nice, explicit method chain.  From the consumer standpoint, the happy path is obvious and fluid.  
+A clean, explicit pipeline has been introduced with an error handler injected to the ```on_error``` method.  Besides handling errors more easily, the happy path is obvious without stepping into the class.  The error handler is an obvious place to look for how the component responds to failure.
 
-The error handler is injected using an ```on_error``` method, so we can look at the ```Rescuetime::ErrorHandler``` if we want to see what happens in a state of failure, which we will see soon.
-
-Lastly, in the spirit of Go, we have the result, and an error getting returned.  If there is an error, ```@error``` will contain a value and ```@result``` will be ```nil```.  Otherwise, ```@result``` will have a value and ```@error``` will be ```nil```.
-
-Let's take a look at the pipeline:
+Two values are explicitly returned: a result and an error.  If there is an error, ```@error``` will contain a value and ```@result``` will be ```nil```.  Otherwise, ```@result``` will have a value and ```@error``` will be ```nil```.
 
 ```ruby
 require 'active_support/core_ext/time/calculations.rb'
@@ -509,7 +498,7 @@ require 'time'
 require 'boundary'
 
 module Rescuetime
-  class Pipeline
+  class Fetch
     def format_date(time)
       Time.parse(time).strftime('%Y-%m-%d')
     end
@@ -551,9 +540,9 @@ module Rescuetime
 end
 ```
 
-The methods have a fantastic uniformity -- they all take one argument, and return one argument.  They have no error handling or data validation.  This is as pure a happy path as can be hoped for, and the methods are wonderfully easy to read.  
+The methods have uniformity and simple pre and post-conditions.  They have no error handling or data validation.  This is pure happy path, and the methods are small and easy to read.  
 
-There is also no ```initialization``` and if you look back at the consumer, the methods seen publically have no airity, yet these all have an airity of 1.  Both of these, as well as the implementation wart of putting the ```include``` at the bottom of the class, is revealed in the ```Boundary```'s metaprogramming:
+The bottom of the class includes the ```Boundary``` object, whose metaprogramming provides the magic:
 
 ```ruby
 require 'logger'
@@ -601,9 +590,9 @@ module Boundary
 end
 ```
 
-Metaprogramming is a dangerous art, but here we are leveraging it well.  After ```including``` the module, Ruby calls the ```included``` callback where I get all of the instance methods defined on the class and define aliases around them to rescue and fail fast.
+After ```including``` the module, Ruby calls the ```included``` callback where all of the instance methods defined on the class receive aliases to provide fail fast error handling.
 
-If a failure happens, I eventually will call that method name on the handler:
+If a failure happens, the handler is sent the method with the data and the error that occurred:
 
 ```ruby
 require 'error'
@@ -629,11 +618,7 @@ module Rescuetime
 end
 ```
 
-This is explicit, simple, and easily changable -- it reminds me a bit of pattern matching.  Define the method you want to handle on, and it receives the data the method executed with, and the raised error.  If it is called, that means the error occured in that method.  The handler can figure out what really went wrong with methods that are a bit more ambiguous, like ```fetch_rows```.
-
-There is also a default method that gets called if there is no error handler setup for the method.
-
-Let's look at the ```Error``` object:
+The error handler is implemented in a style akin to pattern matching.  Simply define the handler method for the method it is meant to handle.  If an error occurs during the execution of the method, the handler method of the same name will be invoked.  By scoping it to the method, figuring out what went wrong in methods that are more ambiguous, like ```fetch_rows``` becomes simpler.  The ```default``` method gets called if there is no method on the error handler with the name of the errored method.
 
 ```ruby
 require 'pretty_backtrace'
@@ -662,31 +647,43 @@ class Error
 end
 ```
 
-The error we return from the handler has two methods: one for the system and one for the user.  The ```user_error_information``` returns an ```i18n``` key.  This means the consumer will have to map that into the appropriate text on the front-end.  This is a nice separation of responsibilities and keeps the back-end from having to change for presentation text changes.
+The error wrapper has two methods: one for the system and one for the user.  The ```user_error_information``` returns an ```i18n``` key.  The consumer will display the appropriate text on the front-end.  This protects the back-end from changing for presentation reasons.
 
-The ```system_error_information``` returns a hash with the ```i18n``` key, the error, and a filtered backtrace.  I also enabled ```PrettyBacktrace```, a gem that takes the backtrace and adds contextual information like variable values and actual code snippets.
-
-If we didn't want to use a gem for contextual information, it would be easy to create a Log object with data about every method when invoked. 
-
-As a hashes and strings I can process this data programatically, and as an engineer, I have the context I need to better understand what happened.  It's a great start.
+The ```system_error_information``` returns a hash with the ```i18n``` key, the error, and a filtered backtrace.  [PrettyBacktrace](https://github.com/ko1/pretty_backtrace) is enabled, a gem that takes the backtrace and adds contextual information like variable values and code snippets.  I don't believe it is production ready, but it is a nice proof of concept.  A log object that captured information in the ```Boundary``` around every method could record the necessary contextual information.
 
 [ex3 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex3)
 
 ### <a name="wrap"></a> Focus on Reducing Complexity
 
-The abstractions we made above are still evolving, though we do have the beginning of something useful.  It's maintainable, explicit, and allows greater ability to adapt to the more exotic failures we will encounter as we scale -- if we need circuit breakers, semaphores or logging, we have a place to add it.  Informative errors to make the user experience better for the consumer are returned.  Significantly less code needs to be written and maintained around handling failure.  A linear and scoped convention is set for handling error to make it easy for developers to read and understand what happens in the flow of control during failure.
+The abstractions made above are a great start.  They are maintainable, explicit, and can adapt to the more exotic failures seen at scale. The boundaries are good locations to introduce  circuit breakers, semaphores or more logging.  Uniform post-conditions simplified the consumer of the fetch component, and the user will not see random stack traces.  The error handler itself is small and has a maintainable scope.  The complexities introduced by handling failure are addressed.
 
-Depending on the needs and demands you operate in, the code above may not appeal.  The principles still should, though.  Work on separating and scoping error handling in a uniform, explicit manner.  As you grow, it will only become more complicated.  Ignoring failure is impossible, and the most resilient systems have failure response as a cornerstone to system convention and philosophy.
+Depending on the language, or existing convention, the above abstraction may not be an immediate solution.  Handling failure is a constant battle against growing complexity.  Structure code in a way to make certain errors irrelevant, and the rest easy to identify and handle in an isolated, limited scope.  The happy path is a revered place that must be kept clean at all times, and the simplicity of its design correlates to the simplicity of the error handling.
+
+As a greenfield application, remember that ignoring failure is impossible, and the most resilient systems have failure response as a cornerstone of system convention and philosophy.
 
 ### <a name="sources"></a> Sources
 
+http://queue.acm.org/detail.cfm?id=2353017
+
+http://web.archive.org/web/20090430014122/http://nplus1.org/articles/a-crash-course-in-failure/
+
 http://devblog.avdi.org/2014/05/21/jim-weirich-on-exceptions/
 
-https://blog.golang.org/errors-are-values
+http://www.se-radio.net/2008/03/episode-89-joe-armstrong-on-erlang/
 
 http://erlang.org/doc/reference_manual/processes.html
 
-Learn you some Erlang: http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG
+http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG
+
+http://www.amazon.com/Programming-Language-Addison-Wesley-Professional-Computing-ebook/dp/B0184N7WWS
+
+http://blog.golang.org/error-handling-and-go
+
+https://blog.golang.org/errors-are-values
+
+https://github.com/Reactive-Extensions/RxJS
+
+https://github.com/ko1/pretty_backtrace
 
 
 

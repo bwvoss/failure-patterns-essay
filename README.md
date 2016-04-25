@@ -383,7 +383,7 @@ $.ajax({
 console.log("Finished?");
 ```
 
-The Ajax request is not guaranteed to finish before ```console.log``` is invoked.  Non-linear execution means error handling code cannot be written as:
+The Ajax request is not guaranteed to finish before `console.log` is invoked.  Non-linear execution means error handling code cannot be written as:
 
 ```javascript
 try {
@@ -432,7 +432,7 @@ Scoping error handlers to a method, or class, keeps error handlers discrete and 
 
 Application design influences the complexity of handling errors.  Erlang shows shared-nothing processes reduce the segment of errors around locking and shared memory from occurring, and small functional pipelines popular in Reactive programming provide a smaller scope to evaluate when errors occur.
 
-##### Demonstrate Error Uniformly
+##### Fail Uniformly
 
 > Well-designed computational systems, like well-designed automobiles or nuclear reactors, are designed in a modular manner, so that the parts can be constructed, replaced, and debugged separately.
 > 

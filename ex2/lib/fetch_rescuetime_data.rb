@@ -27,7 +27,7 @@ class RescuetimeData
       return { error: "not a real date" }
     end
 
-    return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
+    return if ENV['RESCUETIME_API_URL'].nil? || ENV['RESCUETIME_API_KEY'].nil?
 
     url =
       "#{ENV['RESCUETIME_API_URL']}?"\

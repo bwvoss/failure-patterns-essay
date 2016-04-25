@@ -104,7 +104,7 @@ def get
 end
 ```
 
-The next ticket has to do with the ```params[:datetime]``` field full of bad data, and it must be a parsable :
+The next ticket has to do with the `params[:datetime]` field full of bad data, which must be parsable:
 
 ```ruby
 begin
@@ -239,7 +239,7 @@ Something has to be done quickly. The longer error handling is deferred, the mor
 
 ##### Conventional Flow Control
 
-In Go, ```error``` is built-in, ordinary value.  The creators of Go saw the utilities commonly used to control error -- like throw, rescue, catch, or raise -- makes code less maintainable.  Instead, Go uses normal control flow mechanisms like ```if``` and ```return``` to handle errors:
+In Go, `error` is built-in, ordinary value.  The creators of Go saw the utilities commonly used to control error -- like throw, rescue, catch, or raise -- makes code less maintainable.  Instead, Go uses normal control flow mechanisms like `if` and `return` to handle errors:
 
 ```go
 f, err := os.Open("filename.ext")
@@ -303,14 +303,14 @@ loop({M,F,A}) ->
 ```
 [src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
-A process is a lightweight, isolated process in the Erlang VM. It is not an OS process.  Erlang processes are shared-nothing: no memory sharing, no locking and communication can only happen through asynchronous message passing.  They are designed this way so that when one fails, the other processes will be safe to continue.  A process is created using the ```spawn``` built-in function:
+A process is a lightweight, isolated process in the Erlang VM. It is not an OS process.  Erlang processes are shared-nothing: no memory sharing, no locking and communication can only happen through asynchronous message passing.  They are designed this way so that when one fails, the other processes will be safe to continue.  A process is created using the `spawn` built-in function:
 
 ```erlang
 start(Mod,Args) ->
   spawn(?MODULE, init, [{Mod, Args}]).
 ```
 
-```?MODULE``` is an Erlang macro that will evaluate to the name of the module at compile-time.  The second argument is the name of the function that will be invoked on the module, and the third argument is a list of arguments the function will receive.  In this case, ```sup```'s ```init``` function will be called with a tuple that has the values by-way of pattern matching with the arguments received.
+`?MODULE` is an Erlang macro that will evaluate to the name of the module at compile-time.  The second argument is the name of the function that will be invoked on the module, and the third argument is a list of arguments the function will receive.  In this case, `sup`'s `init` function will be called with a tuple that has the values by-way of pattern matching with the arguments received.
 
 The next method down looks similar:
 
@@ -319,13 +319,13 @@ start_link(Mod,Args) ->
   spawn_link(?MODULE, init, [{Mod, Args}]).
 ```
 
-The ```spawn_link``` built-in function also creates a new process, but also atomically links our own process with the newly created one, ensuring we always link to a live process.
+The `spawn_link` built-in function also creates a new process, but also atomically links our own process with the newly created one, ensuring we always link to a live process.
 
 ##### Links and Exit Trapping
 
 A link is a bidirectional bond between two processes.  If a process dies, it sends an exit signal that will kill any linked processes.  A supervisor looking after thousands of workers will want its workers to be cleaned up if it dies.  If a worker dies, a supervisor will most likely not want to die with it.  For this, Erlang allows us to trap and handle the exit signal sent from a linked process:
 
-The first line of the ```init``` function invokes a built-in function called ```process_flag```:
+The first line of the `init` function invokes a built-in function called `process_flag`:
 
 ```erlang
 init({Mod,Args}) ->
@@ -333,7 +333,7 @@ init({Mod,Args}) ->
   loop({Mod,start_link,Args}).
 ```
 
-When ```process_flag``` is passed the arguments of ```trap_exit, true``` then the exit signals received from dead linked processes will be transformed into: ```{'EXIT', Pid, Reason}```, which can be handled, as the ```loop``` function demonstrates:
+When `process_flag` is passed the arguments of `trap_exit, true` then the exit signals received from dead linked processes will be transformed into: `{'EXIT', Pid, Reason}`, which can be handled, as the `loop` function demonstrates:
 
 ```erlang
 loop({M,F,A}) ->
@@ -347,15 +347,15 @@ loop({M,F,A}) ->
   end.
 ```
 
-```loop``` is a function that takes one argument -- a tuple with a module, a function, and an argument list.  ```apply``` is a built-in function that will take those three values and invoke the function on that module with the arguments.
+`loop` is a function that takes one argument -- a tuple with a module, a function, and an argument list.  `apply` is a built-in function that will take those three values and invoke the function on that module with the arguments.
 
-```apply``` returns a value that gets bound to a variable (variables start with capital letters in Erlang) called ```Pid```, which in Erlang is convention for "process identifier".  This means the ```apply``` call will spawn a new process.
+`apply` returns a value that gets bound to a variable (variables start with capital letters in Erlang) called `Pid`, which in Erlang is convention for "process identifier".  This means the `apply` call will spawn a new process.
 
-```receive``` specifies what to do when the process receives messages of a specific pattern.  When a message is sent they get scheduled for delivery by the Erlang VM, and if the receiving process is dead, Erlang will discard the message, but the sending process will not fail. 
+`receive` specifies what to do when the process receives messages of a specific pattern.  When a message is sent they get scheduled for delivery by the Erlang VM, and if the receiving process is dead, Erlang will discard the message, but the sending process will not fail. 
 
-If the message has the ```shutdown``` atom: ```{'EXIT', _From, shutdown}``` then the process will exit, killing itself and any linked processes.  
+If the message has the `shutdown` atom: `{'EXIT', _From, shutdown}` then the process will exit, killing itself and any linked processes.  
 
-The second pattern the message could match: ```{'EXIT', Pid, Reason}``` is the default exit message that will get trapped and handled.  When that happens some text is printed and the process is re-spawn.
+The second pattern the message could match: `{'EXIT', Pid, Reason}` is the default exit message that will get trapped and handled.  When that happens some text is printed and the process is re-spawn.
 
 Erlang's clean contracts between shared-nothing components makes whole categories of errors irrelevant.  Failing fast reduces the chance errors harm data or cause cascading failures, and eliminates handling code for a cleaner project.  Keeping error handling logic in supervisors allows workers to purely express business logic.
 
@@ -484,9 +484,9 @@ class Consumer
   end
 end
 ```
-A clean, explicit pipeline has been introduced with an error handler injected to the ```on_error``` method.  Besides handling errors more easily, the happy path is obvious without stepping into the class.  The error handler is an obvious place to look for how the component responds to failure.
+A clean, explicit pipeline has been introduced with an error handler injected to the `on_error` method.  Besides handling errors more easily, the happy path is obvious without stepping into the class.  The error handler is an obvious place to look for how the component responds to failure.
 
-Two values are explicitly returned: a result and an error.  If there is an error, ```@error``` will contain a value and ```@result``` will be ```nil```.  Otherwise, ```@result``` will have a value and ```@error``` will be ```nil```.
+Two values are explicitly returned: a result and an error.  If there is an error, `@error` will contain a value and `@result` will be `nil`.  Otherwise, `@result` will have a value and `@error` will be `nil`.
 
 ```ruby
 require 'active_support/core_ext/time/calculations.rb'
@@ -539,7 +539,7 @@ end
 
 The methods have uniformity and simple pre and post-conditions.  They have no error handling or data validation.  This is pure happy path, and the methods are small and easy to read.  
 
-The bottom of the class includes the ```Boundary``` object, whose metaprogramming provides the magic:
+The bottom of the class includes the `Boundary` object, whose metaprogramming provides the magic:
 
 ```ruby
 require 'logger'
@@ -587,7 +587,7 @@ module Boundary
 end
 ```
 
-After ```including``` the module, Ruby calls the ```included``` callback where all of the instance methods defined on the class receive aliases to provide fail fast error handling.
+After `including` the module, Ruby calls the `included` callback where all of the instance methods defined on the class receive aliases to provide fail fast error handling.
 
 If a failure happens, the handler is sent the method with the data and the error that occurred:
 
@@ -615,7 +615,7 @@ module Rescuetime
 end
 ```
 
-The error handler is implemented in a style akin to pattern matching.  Simply define the handler method for the method it is meant to handle.  If an error occurs during the execution of the method, the handler method of the same name will be invoked.  By scoping it to the method, figuring out what went wrong in methods that are more ambiguous, like ```fetch_rows``` becomes simpler.  The ```default``` method gets called if there is no method on the error handler with the name of the errored method.
+The error handler is implemented in a style akin to pattern matching.  Simply define the handler method for the method it is meant to handle.  If an error occurs during the execution of the method, the handler method of the same name will be invoked.  By scoping it to the method, figuring out what went wrong in methods that are more ambiguous, like `fetch_rows` becomes simpler.  The `default` method gets called if there is no method on the error handler with the name of the errored method.
 
 ```ruby
 require 'pretty_backtrace'
@@ -644,9 +644,9 @@ class Error
 end
 ```
 
-The error wrapper has two methods: one for the system and one for the user.  The ```user_error_information``` returns an ```i18n``` key.  The consumer will display the appropriate text on the front-end.  This protects the back-end from changing for presentation reasons.
+The error wrapper has two methods: one for the system and one for the user.  The `user_error_information` returns an `i18n` key.  The consumer will display the appropriate text on the front-end.  This protects the back-end from changing for presentation reasons.
 
-The ```system_error_information``` returns a hash with the ```i18n``` key, the error, and a filtered backtrace.  [PrettyBacktrace](https://github.com/ko1/pretty_backtrace) is enabled, a gem that takes the backtrace and adds contextual information like variable values and code snippets.  I don't believe it is production ready, but it is a nice proof of concept.  A log object that captured information in the ```Boundary``` around every method could record the necessary contextual information.
+The `system_error_information` returns a hash with the `i18n` key, the error, and a filtered backtrace.  [PrettyBacktrace](https://github.com/ko1/pretty_backtrace) is enabled, a gem that takes the backtrace and adds contextual information like variable values and code snippets.  I don't believe it is production ready, but it is a nice proof of concept.  A log object that captured information in the `Boundary` around every method could record the necessary contextual information.
 
 [ex3 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex3)
 

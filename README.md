@@ -72,8 +72,8 @@ Slowly, the team's inboxes fill with error reports, and they diligently set out 
 
 ```ruby
 def self.request(datetime)
-	formatted_date = datetime.strftime('%Y-%m-%d')
-	return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
+  formatted_date = datetime.strftime('%Y-%m-%d')
+  return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
     # ...continue
 ```
 
@@ -81,26 +81,26 @@ Since request can now return nil, a guard is added to the parsing:
 
 ```ruby
 def self.fetch(datetime)
-	response = request(datetime)
-	return unless response
+  response = request(datetime)
+  return unless response
 	
-	response.fetch('rows').map do |row|
-	  {
-		date: ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
-		# ...continue
+  response.fetch('rows').map do |row|
+    {
+	   date: ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+	   # ...continue
 ```
 
 The consumer (here it is some sort of HTTP client) also has to respond to nil:
 
 ```ruby
 def get
-	response = RescuetimeFetch.request(params[:datetime])
+  response = RescuetimeFetch.request(params[:datetime])
 	
-	if response.nil?
-		return []
-	else
-		response
-	end
+  if response.nil?
+	return []
+  else
+	response
+  end
 end
 ```
 
@@ -108,9 +108,9 @@ The next ticket has to do with the `params[:datetime]` field full of bad data, w
 
 ```ruby
 begin
-	formatted_date = Time.parse(datetime).strftime('%Y-%m-%d')
+  formatted_date = Time.parse(datetime).strftime('%Y-%m-%d')
 rescue => e
-	return { error: "not a real date" }
+  return { error: "not a real date" }
 end
 
 return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
@@ -121,14 +121,14 @@ Since this is something from the user, it's decided to return some context to th
 
 ```ruby
 def self.fetch(datetime)
-	response = request(datetime)
-	return unless response 
-	return response if response[:error]
+  response = request(datetime)
+  return unless response 
+  return response if response[:error]
 	
-	response.fetch('rows').map do |row|
-	  {
-		date: ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
-		# ...continue
+  response.fetch('rows').map do |row|
+    {
+	   date: ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+	   # ...continue
 ```
 
 The consumer must handle a new design as well:

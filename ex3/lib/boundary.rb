@@ -6,6 +6,7 @@ module Boundary
 
     klass.send(:define_method, "initialize") do |value|
       @result = value
+      super()
     end
 
     klass.send(:define_method, "on_error") do |handler|

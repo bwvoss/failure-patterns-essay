@@ -253,7 +253,7 @@ Coupled with Go's static typing, errors have to be faced in even the simplest Go
 
 ##### Communicating With Error messages
 
-The Go community's convention for error messages make it easy to identify problems with a casual chain with strings.  Let's say we wanted to craft an error message for an HTTP timeout failure for the Rescuetime code.  In Go, it may be structured like this:
+The Go community's convention for error messages makes it easy to identify problems with a casual chain with strings.  Let's say we wanted to craft an error message for an HTTP timeout failure for the Rescuetime code.  In Go, it may be structured like this:
 
 ```go
 rescuetime: fetch: http timeout: the url of http://rescuetime-api.com timed out at 5 seconds
@@ -537,7 +537,7 @@ module Rescuetime
 end
 ```
 
-The methods have uniformity and simple pre and post-conditions.  They have no error handling or data validation.  This is pure happy path, and the methods are small and easy to read.  
+The methods have uniformity and simple pre and post-conditions.  They have no error handling or data validation.  The methods are small and easy to read, and the logic is not blurred by error handling blocks or conditionals. 
 
 The bottom of the class includes the `Boundary` object, whose metaprogramming provides the magic:
 

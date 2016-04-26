@@ -602,7 +602,9 @@ Depending on the language, or existing convention, the above abstraction may not
 
 As a greenfield application, start on an error handling abstraction early. Ignoring failure is impossible, and the most resilient systems have failure response as a cornerstone of system convention and philosophy.
 
-### <a name="sources"></a> Sources
+### <a name="sources"></a> Where to Go Next
+
+Besides the sources below, I abstracted the last example as the beginning of a Ruby Gem to help pattern and explore good error handling: https://github.com/bwvoss/boundary_handler
 
 http://queue.acm.org/detail.cfm?id=2353017
 

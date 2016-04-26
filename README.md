@@ -271,93 +271,37 @@ Errors as data reduce complexity in flow control and an explicit member of any p
 
 [src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
-Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Erlang/OTP applications are usually represented as a supervision tree, where one process, known as a supervisor, is responsible for observing and orchestrating the workers, which oversee the bulk of the business logic.
+Erlang/OTP applications are usually represented as a supervision tree, where one process, known as a supervisor, is responsible for observing and orchestrating the workers which oversee the bulk of the business logic.
 
 Errors are not usually handled in worker processes.  Instead, when a worker experiences a failure, Erlang wants the program to "let it crash", or fail fast.  The supervisor will know what to do in response to a failed worker.
 
-Isolated units that fail fast help avoid data corruption and transient bugs that commonly cause system crashes at scale, and help reduce an organization's fear of future failures.  Let's walk through a simple supervisor:
+A process is a lightweight, isolated process in the Erlang VM, not an OS process.  Erlang processes are shared-nothing: no memory sharing, no locking and communication can only happen through asynchronous message passing.  This way when one fails, the other processes will not fail.
+
+Isolated units that fail fast help avoid data corruption and transient bugs that commonly cause system crashes at scale, and help reduce an organization's fear of future failures.  They also reduce the type of errors that occur -- by being shared-nothing, families of errors that come from locking and memory sharing cannot happen.
+
+Processes can "link" with one another. If a process dies, it sends an exit signal that will kill any linked processes.  A supervisor looking after thousands of workers will want its workers to be cleaned up if it dies.  The supervisor, however, will probably not want to die if a worker dies and can "trap" the exit signal the linked process emits, allowing it to handle the exit like any other message.
+
+Here is an example of an error handler in a supervisor:
 
 ```erlang
--module(sup).
--export([start/2, start_link/2, init/1, loop/1]).
-
-start(Mod,Args) ->
-  spawn(?MODULE, init, [{Mod, Args}]).
-
-start_link(Mod,Args) ->
-  spawn_link(?MODULE, init, [{Mod, Args}]).
-
-init({Mod,Args}) ->
-  process_flag(trap_exit, true),
-  loop({Mod,start_link,Args}).
-
-loop({M,F,A}) ->
+handle({M,F,A}) ->
   Pid = apply(M,F,A),
   receive
     {'EXIT', _From, shutdown} ->
       exit(shutdown); % will kill the child too
     {'EXIT', Pid, Reason} ->
-      io:format("Process ~p exited for reason ~p~n",[Pid,Reason]),
-      loop({M,F,A})
+      handle({M,F,A})
   end.
 ```
 [src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
-A process is a lightweight, isolated process in the Erlang VM. It is not an OS process.  Erlang processes are shared-nothing: no memory sharing, no locking and communication can only happen through asynchronous message passing.  They are designed this way so that when one fails, the other processes will be safe to continue.  A process is created using the `spawn` built-in function:
-
-```erlang
-start(Mod,Args) ->
-  spawn(?MODULE, init, [{Mod, Args}]).
-```
-
-`?MODULE` is an Erlang macro that will evaluate to the name of the module at compile-time.  The second argument is the name of the function that will be invoked on the module, and the third argument is a list of arguments the function will receive.  In this case, `sup`'s `init` function will be called with a tuple that has the values by-way of pattern matching with the arguments received.
-
-The next method down looks similar:
-
-```erlang
-start_link(Mod,Args) ->
-  spawn_link(?MODULE, init, [{Mod, Args}]).
-```
-
-The `spawn_link` built-in function also creates a new process, but also atomically links our own process with the newly created one, ensuring we always link to a live process.
-
-##### Links and Exit Trapping
-
-A link is a bidirectional bond between two processes.  If a process dies, it sends an exit signal that will kill any linked processes.  A supervisor looking after thousands of workers will want its workers to be cleaned up if it dies.  If a worker dies, a supervisor will most likely not want to die with it.  For this, Erlang allows us to trap and handle the exit signal sent from a linked process:
-
-The first line of the `init` function invokes a built-in function called `process_flag`:
-
-```erlang
-init({Mod,Args}) ->
-  process_flag(trap_exit, true),
-  loop({Mod,start_link,Args}).
-```
-
-When `process_flag` is passed the arguments of `trap_exit, true` then the exit signals received from dead linked processes will be transformed into: `{'EXIT', Pid, Reason}`, which can be handled, as the `loop` function demonstrates:
-
-```erlang
-loop({M,F,A}) ->
-  Pid = apply(M,F,A),
-  receive
-    {'EXIT', _From, shutdown} ->
-      exit(shutdown); % will kill the child too
-    {'EXIT', Pid, Reason} ->
-      io:format("Process ~p exited for reason ~p~n",[Pid,Reason]),
-      loop({M,F,A})
-  end.
-```
-
-`loop` is a function that takes one argument -- a tuple with a module, a function, and an argument list.  `apply` is a built-in function that will take those three values and invoke the function on that module with the arguments.
-
-`apply` returns a value that gets bound to a variable (variables start with capital letters in Erlang) called `Pid`, which in Erlang is convention for "process identifier".  This means the `apply` call will spawn a new process.
-
-`receive` specifies what to do when the process receives messages of a specific pattern.  When a message is sent they get scheduled for delivery by the Erlang VM, and if the receiving process is dead, Erlang will discard the message, but the sending process will not fail. 
+`receive` specifies what to do when the process receives messages of a specific pattern.  When a message is sent they get scheduled for delivery by the Erlang VM. 
 
 If the message has the `shutdown` atom: `{'EXIT', _From, shutdown}` then the process will exit, killing itself and any linked processes.  
 
-The second pattern the message could match: `{'EXIT', Pid, Reason}` is the default exit message that will get trapped and handled.  When that happens some text is printed and the process is re-spawn.
+The second pattern the message could match: `{'EXIT', Pid, Reason}` is the default exit message that will get trapped and handled.  When that happens the process gets re-spawn.  
 
-Erlang's clean contracts between shared-nothing components makes whole categories of errors irrelevant.  Failing fast reduces the chance errors harm data or cause cascading failures, and eliminates handling code for a cleaner project.  Keeping error handling logic in supervisors allows workers to purely express business logic.
+Keeping error handling logic in supervisors allows workers to purely express business logic, and encapsulates application logic around failure.
 
 #### <a name="js"></a> Asynchronous Javascript
 

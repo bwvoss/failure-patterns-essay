@@ -271,11 +271,11 @@ Errors as data reduce complexity in flow control and an explicit member of any p
 
 [src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
 
-Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Erlang/OTP applications are usually represented as a supervision tree, where one process, known as a supervisor and responsible for observing and orchestrating the workers, will oversee worker processes holding the bulk of the business logic.
+Erlang is known as a language to build highly scalable, fault tolerant systems of a massively distributed nature.  Erlang/OTP applications are usually represented as a supervision tree, where one process, known as a supervisor, is responsible for observing and orchestrating the workers, which oversee the bulk of the business logic.
 
-Errors are not usually handled in worker processes.  Instead, when a worker experiences a failure, Erlang wants us to let it crash, or fail fast.  The supervisor will know what to do in response to a failed worker.
+Errors are not usually handled in worker processes.  Instead, when a worker experiences a failure, Erlang wants the program to "let it crash", or fail fast.  The supervisor will know what to do in response to a failed worker.
 
-Isolated units that fail fast help avoid data corruption and transient bugs that commonly cause system crashes at scale, and helps reduce an organizations fear of possible future failures.  Let's walk through a simple supervisor:
+Isolated units that fail fast help avoid data corruption and transient bugs that commonly cause system crashes at scale, and help reduce an organization's fear of future failures.  Let's walk through a simple supervisor:
 
 ```erlang
 -module(sup).

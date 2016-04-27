@@ -64,7 +64,7 @@ class RescuetimeData
 end
 
 ```
-[ex1 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex1)
+[ex1 and tests](http://github.com/bwvoss/failure-patterns-essay/tree/master/ex1)
 
 This is nice -- the business logic is clear.  Lower volumes of traffic produce only a few errors, which are deferred to release the happy path.  To allow the team to respond more quickly in case of failure, an exception notifier is installed.
 
@@ -74,10 +74,10 @@ Slowly, the team's inboxes fill with error reports, and they diligently set out 
 def self.request(datetime)
   formatted_date = datetime.strftime('%Y-%m-%d')
   return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
-    # ...continue
+  # ...continue
 ```
 
-Since request can now return nil, a guard is added to the parsing:
+Since `request` can now return nil, a guard is added to the parsing:
 
 ```ruby
 def self.fetch(datetime)
@@ -90,7 +90,7 @@ def self.fetch(datetime)
 	   # ...continue
 ```
 
-The consumer (here it is some sort of HTTP client) also has to respond to nil:
+The consumer (here some sort of HTTP client) also has to respond to nil:
 
 ```ruby
 def get
@@ -117,7 +117,7 @@ return if ENV['RESCUETIME_API_URL'].empty? || ENV['RESCUETIME_API_KEY'].empty?
 # ...continue
 ```
 
-Since this is something from the user, it's decided to return some context to the user so they may change their input:
+It's decided to return some information so the user can change their input:
 
 ```ruby
 def self.fetch(datetime)
@@ -137,17 +137,17 @@ The consumer must handle a new design as well:
 # In the consumer
 
 def get
-	response = RescuetimeFetch.request(params[:datetime])
+  response = RescuetimeFetch.request(params[:datetime])
 	
-	if response.nil? || response[:error]
-		return response[:error] || "We're sorry, something went wrong."
-	else
-		response
-	end
+  if response.nil? || response[:error]
+    return response[:error] || "We're sorry, something went wrong."
+  else
+    response
+  end
 end
 ```
 
-From handling just two errors, our codebase went from 40 to 57 total lines of code, and our flog score, a general measure of complexity increased from 33 to 47, a roughly 42% increase in complexity and amount of code.  For only two errors.  This is the whole thing:
+From handling just two errors, the codebase went from 40 to 57 total lines of code, and the flog score, a general measure of complexity increased from 33 to 47, a roughly 42% increase in complexity and amount of code.  For only two errors.  This is the whole thing:
 
 ```ruby
 require 'fetch_rescuetime_data'
@@ -211,11 +211,11 @@ class RescuetimeData
   end
 end
 ```
-[ex2 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex2)
+[ex2 and tests](http://github.com/bwvoss/failure-patterns-essay/tree/master/ex2)
 
 This is a natural progression in most projects: get the happy path out the door, setup exception notification, and fix the errors as they come in.
 
-Unless a more sophisticated abstraction is made around handling failure, the complexity and lines of code will continue to grow at an uncontrolled rate.  If most of the error cases were fixed above, the happy path would be the smallest percentage of the codebase.
+Unless a more sophisticated abstraction is made around handling failure, the complexity and lines of code will continue to grow exponentially.  Addressing the majority of the error cases would quickly overwhelm the happy path.
 
 Even though the error reports have been fixed, the pre and post-conditions for the methods have become more complex, and the mitigated errors are not recorded anymore, reducing the metrics and the team's understanding of how the application behaves.
 
@@ -592,7 +592,7 @@ The error wrapper has two methods: one for the system and one for the user.  The
 
 The `system_error_information` returns a hash with the `i18n` key, the error, and a filtered backtrace.  [PrettyBacktrace](https://github.com/ko1/pretty_backtrace) is enabled, a gem that takes the backtrace and adds contextual information like variable values and code snippets.  I don't believe it is production ready, but it is a nice proof of concept.  A log object that captured information in the `Boundary` around every method could record the necessary contextual information.
 
-[ex3 and tests](http://github.com/bwvoss/chocolate_shell/tree/master/ex3)
+[ex3 and tests](http://github.com/bwvoss/failure-patterns-essay/tree/master/ex3)
 
 ### <a name="wrap"></a> Focus on Reducing Complexity
 
@@ -604,7 +604,7 @@ As a greenfield application, start on an error handling abstraction early. Ignor
 
 ### <a name="sources"></a> Where to Go Next
 
-Besides the sources below, I abstracted the last example as the beginning of a Ruby Gem to help pattern and explore good error handling: https://github.com/bwvoss/boundary_handler
+Besides the sources below, I abstracted the last example as the beginning of a Ruby Gem to help pattern and explore good error handling: https://github.com/bwvoss/chocolate_shell
 
 http://queue.acm.org/detail.cfm?id=2353017
 

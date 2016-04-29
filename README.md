@@ -265,21 +265,21 @@ Errors as data reduce complexity in flow control and an explicit member of any p
 
 #### <a name="erlang"></a> Erlang
 
-> The best example of Erlang's robustness is the often-reported nine nines (99.9999999 percent) of availability offered on the Ericsson AXD 301 ATM switches, which consist of more than a million lines of Erlang code.
+> Some studies proved that the main sources of downtime in large scale software systems are intermittent or transient bugs. Then, there's a principle that says that errors which corrupt data should cause the faulty part of the system to die as fast as possible in order to avoid propagating errors and bad data to the rest of the system. 
 > 
 > Fred Hebert
 
-[src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG)
+[src](http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG) && [src](http://dslab.epfl.ch/pubs/crashonly.pdf)
 
 Erlang/OTP applications are usually represented as a supervision tree, where one process, known as a supervisor, is responsible for observing and orchestrating the workers which oversee the bulk of the business logic.
 
 Errors are not usually handled in worker processes.  Instead, when a worker experiences a failure, Erlang wants the program to "let it crash", or fail fast.  The supervisor will know what to do in response to a failed worker.
 
-A process is a lightweight, isolated process in the Erlang VM, not an OS process.  Erlang processes are shared-nothing: no memory sharing, no locking and communication can only happen through asynchronous message passing.  This way when one fails, the other processes will not fail.
+A process is a lightweight, isolated unit in the Erlang VM, not an OS process.  Erlang processes are shared-nothing: no memory sharing, no locking and communication can only happen through asynchronous message passing.  When one fails, the other processes will not fail.
 
-Isolated units that fail fast help avoid data corruption and transient bugs that commonly cause system crashes at scale, and help reduce an organization's fear of future failures.  They also reduce the type of errors that occur -- by being shared-nothing, families of errors that come from locking and memory sharing cannot happen.
+Isolated units that fail fast help avoid data corruption and transient bugs that commonly cause system crashes at scale, and help reduce an organization's fear of future failures.  They also reduce the type of errors that occur -- by being shared-nothing, families of errors that come from locking and memory sharing are much less common.  When errors do happen, linking is commonly used to handle error and recover.
 
-Processes can "link" with one another. If a process dies, it sends an exit signal that will kill any linked processes.  A supervisor looking after thousands of workers will want its workers to be cleaned up if it dies.  The supervisor, however, will probably not want to die if a worker dies and can "trap" the exit signal the linked process emits, allowing it to handle the exit like any other message.
+A link is a special connection between two processes that provides the ability to handle errors or cleanup other processes.  If a process dies, it sends an exit signal that will kill any linked processes.  A supervisor looking after thousands of workers will want its workers to be cleaned up on exit.  The supervisor, however, will probably not want to die if a worker dies.  In that case, a process can "trap" the exit signal the linked process emits to handle the exit like any other message.
 
 Here is an example of an error handler in a supervisor:
 
@@ -311,7 +311,7 @@ Keeping error handling logic in supervisors allows workers to purely express bus
 
 [src](http://queue.acm.org/detail.cfm?id=2353017)
 
-Asynchronous execution forces an approach to error handling that doesn't depend on a linear flow of execution.  There are two JavaScript libraries that deal with asynchronous execution: jQuery, and RxJS, a reactive programming library.
+Asynchronous execution forces an approach to error handling that doesn't depend on a linear flow of execution.  There are two JavaScript libraries I'll cover that deal with asynchronous execution: jQuery, and RxJS, a reactive programming library.
 
 ##### Scoped Callbacks
 
@@ -352,7 +352,7 @@ const subscription = source
 ```
 [src](https://github.com/Reactive-Extensions/RxJS)
 
-Reactive programming leverages collection pipelines.  Collection pipelines are a pattern commonly seen in functional programming, and chain together small functions into a linear flow.
+The pattern seen above is a collection pipeline.  Collection pipelines are a pattern commonly seen in functional programming, and chain together small functions into a linear flow.  This aids in readability, and simplifies the design by having many small failable parts instead of a single, coupled object.
 
 Passing in error handlers as callbacks encourages more generic abstractions, and allows handlers to be scoped to a smaller unit of work.  Functional collection pipelines are easy to reason about and limit failure on a per-function basis.
 
@@ -617,6 +617,8 @@ http://www.se-radio.net/2008/03/episode-89-joe-armstrong-on-erlang/
 http://erlang.org/doc/reference_manual/processes.html
 
 http://www.amazon.com/Learn-Some-Erlang-Great-Good-ebook/dp/B00AZOT4MG
+
+http://dslab.epfl.ch/pubs/crashonly.pdf
 
 http://www.amazon.com/Programming-Language-Addison-Wesley-Professional-Computing-ebook/dp/B0184N7WWS
 

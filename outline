@@ -1,0 +1,126 @@
+### Introduction
+
+We all have error handling in our code and we all hate it.  We need it, though.  So I've been on this quest to better understand handling error's place in our applications.  And it comes down to this main point: that error handling is a main abstraction in systems and most of us are missing it.
+
+introduction and hook that error handling is a missing abstraction in most systems, and it must be started early.  Error handling is an inevitable part of every application.  Systems becomes much worse when treated as something to be added only when needed.  The developer's user experience with the system fundamentally changes when error handling is looked at as an early, and mature part of a system.
+
+This talk is not about the operational setup for fault tolerant systems.
+
+### Part I: The Problem
+
+I'm looking to talk about solving two problems
+
+Problems:
+
+- complexity: readability, and reusability
+- too many ways to exit, flow control
+- errors are invisible, no real idea of where or when more will occur
+Code problems introduced by error handling:
+- testing
+
+Errors are difficult in and of themselves: like gotos they are invisible and jump us out of our normal execution -- invisible and many possible exit points.
+
+We also don't have shared patterns which impact:
+
+- convention
+- communication between teammates
+- promotes more responsible error handling in the future
+
+Error handling and design patterns aren't really spoken about together.  It's not seen as a responsibility -- it's something that we just have to do occasionally if we want our applications to work better, not something really deserving an abstraction.
+
+But what a shame that we have no clear benefits patterns provide when we discuss error handling.  And since we defer error handling until we need it and then peppering it in, we usually design ourselves out of a good abstraction.
+
+### Part II: The Principles
+
+Demonstrate error handling (then meta) in other paradigms so people can "feel" how user experience changes with good error handling.  Theme that will come up over and over again: that error handling is really about easy usability, for the system and end-user.
+
+Go
+
+Errors as Values: promises simpler, easier to read code. This also helps developers reason about flow control and make abstractions when errors happen.  Reasoning about making an abstraction around an if or while loop is more common than try/catches or begin/rescues.  Though this doesn't gaurentee clean abstractions -- we can still write bad code with simple if's and loops.
+
+Pre and PostConditions: supplied by the compiler, but this gives a natural introduction to handling error from the beginning, and makes it much more likely that error handling becomes a part of discussion before more convention is solidified.
+
+This helps reusability of our components since they all fail the same way -- with values.
+
+Errors are communication mechanisms: This also goes into the theme that error handling is for communication.
+
+RxJS
+
+State handlers: on success, on error; injected
+
+This shows that state applies to more than your data.  State can be applied to the execution of your program in terms of being run with errors or not.  And a separate object takes over execution of your program when a new state is entered.
+
+Benefits: separate and easy to understand.  
+
+Principle: Scope error handler by use case
+
+The complexity of the error handler is proporitional to the complexity of the code it is handling.  The more code a single handler encapsulates the more complex the handler will be.  The simplest handlers would be on a per function scope.  Use the same constraints you would with other abstractions for simplicity in the handler.  This also shows that handlers are scoped by use case.
+
+Look at it like a strategy pattern.  Depending on the state, a different stategy is used.
+
+Principle: Error and Success are states your application runs in
+
+State patterns are well-known and makes the program easy to compartmentalize in terms of failure during execution.  Instead of having the state be combined with the happy path, now there is an explicit place to look and modify logic.
+
+And even though every application doesn't make this clear, this happens in every application.  Every application will have either a success state or failure state during its run.
+
+To me, this is an enlightening way to view error handling -- the execution of your program changes state when something unexpected happens.  So now it becomes a philisophical question about what should we do when bad things happen?
+
+Some catch then return some default data, or use the null object pattern.  Some fail and retry.  Some just swallow the error and continue.
+
+Erlang
+
+Fail Fast: error handling isn't just about exceptions, but about control mechanisms that return data based on the state of execution.
+
+Let it Crash: like Feather's talk of the chocolate shell and creamy center.  cleaner code, simpler flow of execution and system's response to failure
+
+Principle: Immutable state; uniform way of failing and NO NILS OR NULL DATA
+
+Mentally this is freeing -- there is no fear of how your app will behave during failure -- it just jumps to the error state flow.  Custom responses to errors are easy and extensible, too, allowing for fast and reliable turn around when adjusting the application for specific errors.
+
+This is like immutablity in success state of the application.  We like immutability for our data, and we get the same benefits when we use it for our success state as well.
+
+These are easier to accomplish when an application is viewed as an ordered list of transformations.  Since the error handling will be specific to the use case and why the objects were drawn together.
+
+Principle: Shared nothing components
+
+Shared nothing components: availability problems in one component will cause availability problems in another component that depends upon it.
+
+Reduce or at least control the errors that occur by design:
+
+There are also semaphores and circuit breakers and timeouts to accomplish similar outcomes that erlang provides from shared-nothing -- these patterns help cleanup locked threads and memory in an efficient manner.  See Hystrix.
+
+Also strive to structure code with simple input output functions that don't depend on more objects -- if one function fails, then fail fast and the handler will know what to do based on the use case the function is consumed in.  Like Uncle Bob's clean architecture with entities and use cases.  The error handlers are in the use cases part.
+
+### Part III: The Patterns
+
+Now let's take a look at implementing some of these ideas, and where we can go from there.
+
+Principles:
+
+Question: when to use default data?
+
+A peice of data that represents a specific response...most of the time that is nil, since you get no response.
+
+So there is a context that shouldn't bleed out of the component.  So be concerned about using defaulted data or null objects if they impact composability of the component, or if persistence happens.  Or if it will be traveling along many components -- now the assumption has bled.
+
+- Fail Fast -- keep data mutation to a minimum after error; and be loud so we can gather an accurate understanding of how our software is behaving.
+   
+- Stateful Separation -- separate objects handle execution based on success state of application
+
+- Value-Based Contracts -- makes using components easier, and more explicit.  The errors can be documented and tested at a component level.  The error will not act as a goto, but instead be a value that can be used in typical control flow.
+
+- Reconciliation -- error messages have to be in a data structure that makes it easy for all parties to understand what went wrong and what can should be done.  Most errors demand a response.
+
+Patterns:
+
+- Strategy
+- State
+- Observer
+- Decorator
+
+### Conclusion
+
+- failure is a big part of convention and architecture
+- find shared principles and patterns for your codebase
+

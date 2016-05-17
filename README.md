@@ -598,7 +598,7 @@ The `system_error_information` returns a hash with the `i18n` key, the error, an
 
 The abstractions made above are a great start.  They are maintainable, explicit, and can adapt to the more exotic failures seen at scale. The boundaries are good locations to introduce  circuit breakers, semaphores or more logging.  Uniform post-conditions simplified the consumer of the fetch component, and the user will not see random stack traces.  The error handler itself is small and has a maintainable scope.  The complexities introduced by handling failure are addressed.
 
-Depending on the language, or existing convention, the above abstraction may not be an immediate solution.  Handling failure is a constant battle against growing complexity.  Structure code in a way to make certain errors irrelevant, and the rest easy to identify and handle in an isolated, limited scope.  The happy path is a revered place that must be kept clean at all times, and the simplicity of its design correlates to the simplicity of the error handling.
+Depending on the language, or existing convention, the above abstraction may not be an immediate solution.  Handling failure is a constant battle against growing complexity.  Structure code in a way to make certain errors less likely, and the rest easy to identify and handle in an isolated, limited scope.  The happy path is a revered place that must be kept clean at all times, and the simplicity of its design correlates to the simplicity of the error handling.
 
 As a greenfield application, start on an error handling abstraction early. Ignoring failure is impossible, and the most resilient systems have failure response as a cornerstone of system convention and philosophy.
 

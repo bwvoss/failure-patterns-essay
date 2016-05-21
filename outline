@@ -8,8 +8,6 @@ This talk is not about the operational setup for fault tolerant systems.
 
 ### Part I: The Problem
 
-I'm looking to talk about solving two problems
-
 Problems:
 
 - complexity: readability, and reusability
@@ -20,19 +18,22 @@ Code problems introduced by error handling:
 
 Errors are difficult in and of themselves: like gotos they are invisible and jump us out of our normal execution -- invisible and many possible exit points.
 
-We also don't have shared patterns which impact:
+"plague"
 
-- convention
-- communication between teammates
-- promotes more responsible error handling in the future
-
-Error handling and design patterns aren't really spoken about together.  It's not seen as a responsibility -- it's something that we just have to do occasionally if we want our applications to work better, not something really deserving an abstraction.
-
-But what a shame that we have no clear benefits patterns provide when we discuss error handling.  And since we defer error handling until we need it and then peppering it in, we usually design ourselves out of a good abstraction.
+- no discernable abstractions made; but common for happy path -- almost immediately and often too soon, though abstractions around error handling are not common to discuss
 
 ### Part II: The Principles
 
-Demonstrate error handling (then meta) in other paradigms so people can "feel" how user experience changes with good error handling.  Theme that will come up over and over again: that error handling is really about easy usability, for the system and end-user.
+Async JS:
+
+State applies to more than data, but to the health of the program.
+
+Also, having an abstraction that executes the happy path, but can also divert down the error path when it happens makes this possible.
+
+Erlang:
+
+- Fail Fast
+- Chocolate Shell and Supervisors
 
 Go
 
@@ -105,6 +106,8 @@ A peice of data that represents a specific response...most of the time that is n
 So there is a context that shouldn't bleed out of the component.  So be concerned about using defaulted data or null objects if they impact composability of the component, or if persistence happens.  Or if it will be traveling along many components -- now the assumption has bled.
 
 - Fail Fast -- keep data mutation to a minimum after error; and be loud so we can gather an accurate understanding of how our software is behaving.
+
+- Reduced Dependency -- like erlang's shared-nothing processes, focus on reducing failures caused by coupling.  Do not couple anything that shouldn't fail together.
    
 - Stateful Separation -- separate objects handle execution based on success state of application
 
@@ -124,3 +127,12 @@ Patterns:
 - failure is a big part of convention and architecture
 - find shared principles and patterns for your codebase
 
+We also don't have shared patterns which impact:
+
+- convention
+- communication between teammates
+- promotes more responsible error handling in the future
+
+Error handling and design patterns aren't really spoken about together.  It's not seen as a responsibility -- it's something that we just have to do occasionally if we want our applications to work better, not something really deserving an abstraction.
+
+But what a shame that we have no clear benefits patterns provide when we discuss error handling.  And since we defer error handling until we need it and then peppering it in, we usually design ourselves out of a good abstraction.

@@ -15,7 +15,7 @@ loop({M,F,A}) ->
   Pid = apply(M,F,A),
   receive
     {'EXIT', _From, shutdown} ->
-      exit(shutdown); % will kill the child too
+      exit(shutdown);
     {'EXIT', Pid, Reason} ->
       io:format("Process ~p exited for reason ~p~n",[Pid,Reason]),
       loop({M,F,A})

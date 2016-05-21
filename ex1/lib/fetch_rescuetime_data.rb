@@ -7,12 +7,12 @@ class RescuetimeData
 
     response.fetch('rows').map do |row|
       {
-        date:                  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
+        date:  ActiveSupport::TimeZone[ENV['RESCUETIME_TIMEZONE']].parse(row[0]).utc.to_s,
         time_spent_in_seconds: row[1],
-        number_of_people:      row[2],
-        activity:              row[3],
-        category:              row[4],
-        productivity:          row[5]
+        number_of_people: row[2],
+        activity: row[3],
+        category: row[4],
+        productivity: row[5]
       }
     end
   end

@@ -95,44 +95,25 @@ Also strive to structure code with simple input output functions that don't depe
 
 ### Part III: The Patterns
 
-Now let's take a look at implementing some of these ideas, and where we can go from there.
+review the high level combinations discussed:
+1. They all have design patterns to encapsulate and control the error.  In all, we are in a position to control error programatically and with abstractions.
 
-Principles:
+- strategy to observer pattern, like async js shows
+- decorator pattern based on use case, like erlang shows
+- errors as values as go shows
 
-Question: when to use default data?
+2. As part of convention, you must decide how your system reacts when an error occurs.
 
-A peice of data that represents a specific response...most of the time that is nil, since you get no response.
+Data consistency and protection -- Fail fast, or at least be conscious of the scope and shared knowledge of default data or null objects.
 
-So there is a context that shouldn't bleed out of the component.  So be concerned about using defaulted data or null objects if they impact composability of the component, or if persistence happens.  Or if it will be traveling along many components -- now the assumption has bled.
+3.  Decide on the best information and data structure to return after failure.  Errors are letters penned to someone of our choosing.
 
-- Fail Fast -- keep data mutation to a minimum after error; and be loud so we can gather an accurate understanding of how our software is behaving.
+at a high level these all have to do with developing consistent APIs, or interfaces, and encapsulating the way a program responds when something goes wrong.  It brings it back to classic programming.
 
-- Reduced Dependency -- like erlang's shared-nothing processes, focus on reducing failures caused by coupling.  Do not couple anything that shouldn't fail together.
-   
-- Stateful Separation -- separate objects handle execution based on success state of application
-
-- Value-Based Contracts -- makes using components easier, and more explicit.  The errors can be documented and tested at a component level.  The error will not act as a goto, but instead be a value that can be used in typical control flow.
-
-- Reconciliation -- error messages have to be in a data structure that makes it easy for all parties to understand what went wrong and what can should be done.  Most errors demand a response.
-
-Patterns:
-
-- Strategy
-- State
-- Observer
-- Decorator
+Then go over the code as a possible solution.
 
 ### Conclusion
 
-- failure is a big part of convention and architecture
-- find shared principles and patterns for your codebase
-
-We also don't have shared patterns which impact:
-
-- convention
-- communication between teammates
-- promotes more responsible error handling in the future
-
-Error handling and design patterns aren't really spoken about together.  It's not seen as a responsibility -- it's something that we just have to do occasionally if we want our applications to work better, not something really deserving an abstraction.
-
-But what a shame that we have no clear benefits patterns provide when we discuss error handling.  And since we defer error handling until we need it and then peppering it in, we usually design ourselves out of a good abstraction.
+- good abstractions are low-level and separate from business logic
+- error is about retaining business value and customer respect
+- we now have ideas to centralize discussion around

@@ -9,5 +9,5 @@ var observer = Rx.Observer.create(
 
 var subscription = source
   .map(function(s) { return s * 2 })
-  // .filter(function(s) { return notDefd })
+  .filter(function(s) { return notDefd })
   .subscribe(observer);

@@ -1,11 +1,8 @@
 -module(sup).
--export([start/2, start_link/2, init/1, loop/1]).
+-export([start/2, init/1, loop/1]).
 
 start(Mod,Args) ->
   spawn(?MODULE, init, [{Mod, Args}]).
-
-start_link(Mod,Args) ->
-  spawn_link(?MODULE, init, [{Mod, Args}]).
 
 init({Mod,Args}) ->
   process_flag(trap_exit, true),

@@ -1,5 +1,5 @@
 var Rx = require('rx');
-var source = Rx.Observable.from([1,2,3,4,5]);
+var source = Rx.Observable.of(1,2,3,4,5);
 
 var observer = Rx.Observer.create(
     function (x) { console.log('onNext: %s', x); },
@@ -7,7 +7,7 @@ var observer = Rx.Observer.create(
     function () { console.log('onCompleted'); });
 
 
-var subscription = source
+source
   .map(function(s) { return s * 2 })
-  .filter(function(s) { return notDefd })
+  // .filter(function(s) { if(s == 4) {throw(new Error('woops!'))} })
   .subscribe(observer);

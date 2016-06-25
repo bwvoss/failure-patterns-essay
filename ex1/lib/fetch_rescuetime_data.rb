@@ -18,7 +18,7 @@ class RescuetimeData
   end
 
   def self.request(datetime)
-    formatted_date = datetime.strftime('%Y-%m-%d')
+    formatted_date = Time.parse(datetime).strftime('%Y-%m-%d')
     url =
       "#{ENV['RESCUETIME_API_URL']}?"\
       "key=#{ENV['RESCUETIME_API_KEY']}&"\

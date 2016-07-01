@@ -8,8 +8,7 @@ import (
 
 func main() {
 	client := http.Client{}
-	response, err := client.Get("http://google.com")
-	// response, err := client.Get("http://blah.lskdfj")
+	response, err := client.Get("http://blah.lskdfj")
 
 	if err != nil {
 		fmt.Println(err)

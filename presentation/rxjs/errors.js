@@ -9,5 +9,5 @@ var observer = Rx.Observer.create(
 
 source
   .map(function(s) { return s * 2 })
-  // .filter(function(s) { if(s == 4) {throw(new Error('woops!'))} })
+  .filter(function(s) { if(s == 4) {throw(new Error('woops!'))} })
   .subscribe(observer);

@@ -7,7 +7,9 @@ import (
 )
 
 func main() {
-	client := http.Client{}
+	client := http.Client{
+		Timeout: 1,
+	}
 	response, err := client.Get("http://blah.lskdfj")
 
 	if err != nil {
